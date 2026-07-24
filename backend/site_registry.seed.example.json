@@ -1,0 +1,18 @@
+[
+  {
+    "code": "ABC",
+    "display_name": "Example City",
+    "country": "Example Country",
+    "latitude": 0.0,
+    "longitude": 0.0,
+    "cluster_prefix": "abc"
+  },
+  {
+    "code": "XYZ",
+    "display_name": "Another City",
+    "country": "Another Country",
+    "latitude": 10.0,
+    "longitude": 20.0,
+    "cluster_prefix": "xyz"
+  }
+]

@@ -1,0 +1,50 @@
+# --- secrets / local config ---
+.env
+.env.*
+!.env.example
+*.local
+
+# --- confidential seed data (real site names/coordinates) ---
+backend/site_registry.seed.json
+
+# --- confidential brand assets (company logo) ---
+frontend/public/logo.*
+admin-frontend/public/logo.*
+
+# --- internal CA cert used for the Docker build (deploy/certs/README.md) ---
+deploy/certs/*.crt
+deploy/certs/*.pem
+
+# --- Python / backend (uv) ---
+backend/.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# --- SQLite data ---
+*.db
+*.sqlite3
+backend/data/
+
+# --- Node / frontend (Vite) ---
+node_modules/
+frontend/dist/
+admin-frontend/dist/
+.vite/
+*.local.js
+routeTree.gen.ts
+
+# --- throwaway Playwright browser install used for one-off manual UI checks ---
+.pw-browsers/
+
+# --- editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- logs ---
+*.log
+npm-debug.log*
