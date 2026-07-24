@@ -14,22 +14,21 @@
 
 ## 架構
 
-```
-┌─────────────────────┐        ┌──────────────────────┐
-│  主看板(前台)         │  Axios │  FastAPI — Public API │──┐
-│  React, Vite dev     │◄──────►│  (port 8000)          │  │  httpx + cachetools TTL cache
-│  server / build       │        └──────────────────────┘  │
-└─────────────────────┘                                    ▼
-                                                   ┌────────────────────┐
-┌─────────────────────┐        ┌──────────────────┐│ Grafana /api/ds/query│
-│  管理後台              │  Axios │  FastAPI — Admin API ││ (匿名存取,唯讀)      │
-│  React, 獨立 Vite      │◄──────►│  (port 8001)          │└────────┬───────────┘
-│  entry,無帳號登入       │        └──────────────────┘             │
-└─────────────────────┘                 │                          ▼
-                                         ▼                 Postgres: slo, slo_target,
-                                  SQLite(site 登錄表、      grafana_mapping, geo
-                                  per-site per-category
-                                  SLO 設定)
+```mermaid
+flowchart LR
+    Public["主看板(前台)<br/>React, Vite dev server / build"]
+    Admin["管理後台<br/>React, 獨立 Vite entry,無帳號登入"]
+    PublicAPI["FastAPI — Public API<br/>port 8000"]
+    AdminAPI["FastAPI — Admin API<br/>port 8001"]
+    SQLite[("SQLite<br/>site 登錄表 +<br/>per-site per-category SLO 設定")]
+    Grafana["Grafana /api/ds/query<br/>匿名存取,唯讀"]
+    Postgres[("Postgres<br/>slo, slo_target,<br/>grafana_mapping, geo")]
+
+    Public -- Axios --> PublicAPI
+    Admin -- Axios --> AdminAPI
+    PublicAPI -- "httpx + cachetools TTL cache" --> Grafana
+    AdminAPI --> SQLite
+    Grafana --> Postgres
 ```
 
 - Backend **完全不寫回** Grafana 的 Postgres——我們對那邊只有(也只想要)查詢權限,那是共用的上游基礎設施,同時也被既有的 Grafana dashboard 使用中。
