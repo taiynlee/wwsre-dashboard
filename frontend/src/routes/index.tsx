@@ -17,6 +17,7 @@ export const Route = createFileRoute('/')({
 function Overview() {
   const [selected, setSelected] = useState<string | null>(null)
   const pinRefs = useRef<Record<string, SVGGElement | null>>({})
+  const dotRefs = useRef<Record<string, SVGCircleElement | null>>({})
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const stageRef = useRef<HTMLDivElement | null>(null)
   const stageResizeObserverRef = useRef<ResizeObserver | null>(null)
@@ -172,6 +173,9 @@ function Overview() {
                       onPinRef={(code, el) => {
                         pinRefs.current[code] = el
                       }}
+                      onDotRef={(code, el) => {
+                        dotRefs.current[code] = el
+                      }}
                       projection={projection}
                       viewBoxWidth={viewBoxWidth}
                       viewBoxHeight={viewBoxHeight}
@@ -217,7 +221,7 @@ function Overview() {
 
             <ConnectorLine
               containerRef={stageRef}
-              fromEl={selected ? pinRefs.current[selected] : null}
+              fromEl={selected ? dotRefs.current[selected] : null}
               toEl={selected ? cardRefs.current[selected] : null}
               toSide={selected && rightSites.some((s) => s.code === selected) ? 'left' : 'top'}
             />

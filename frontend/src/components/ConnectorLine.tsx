@@ -35,9 +35,16 @@ export function ConnectorLine({
         toSide === 'left'
           ? { x: tRect.left - cRect.left, y: tRect.top + tRect.height / 2 - cRect.top }
           : { x: tRect.left + tRect.width / 2 - cRect.left, y: tRect.top - cRect.top }
+      // The line should visibly leave the pin heading toward its target — off
+      // the pin's right edge for a right-column card, off its bottom edge for
+      // a bottom-row card — rather than always departing from dead center.
+      const origin =
+        toSide === 'left'
+          ? { x: fRect.right - cRect.left, y: fRect.top + fRect.height / 2 - cRect.top }
+          : { x: fRect.left + fRect.width / 2 - cRect.left, y: fRect.bottom - cRect.top }
       setLine({
-        x1: fRect.left + fRect.width / 2 - cRect.left,
-        y1: fRect.top + fRect.height / 2 - cRect.top,
+        x1: origin.x,
+        y1: origin.y,
         x2: target.x,
         y2: target.y,
       })

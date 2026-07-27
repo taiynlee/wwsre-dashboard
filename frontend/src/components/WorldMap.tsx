@@ -5,6 +5,8 @@ import type { Topology, GeometryCollection } from 'topojson-specification'
 import type { Feature, FeatureCollection, Geometry } from 'geojson'
 import type { SiteStatus } from '../lib/types'
 import { TIER_FILL, TIER_LABEL } from '../lib/tier'
+import { CONTINENT_FILL, CONTINENT_FILL_HOVER, COUNTRY_CONTINENT } from '../lib/continents'
+import { COUNTRY_NAME_ZH } from '../lib/countryNamesZh'
 
 type CountryFeature = Feature<Geometry, { name: string }>
 
@@ -13,6 +15,7 @@ export function WorldMap({
   selected,
   onSelect,
   onPinRef,
+  onDotRef,
   projection,
   viewBoxWidth,
   viewBoxHeight,
@@ -21,6 +24,11 @@ export function WorldMap({
   selected: string | null
   onSelect: (code: string) => void
   onPinRef?: (code: string, el: SVGGElement | null) => void
+  /** Ref to just the visible dot circle (not the whole pin group, which also
+   * includes the label pill) — the label's position varies per site, so
+   * anchoring a connector line off the full group's bounding box would drift
+   * away from the dot whenever the label sits below/beside it. */
+  onDotRef?: (code: string, el: SVGCircleElement | null) => void
   projection: GeoProjection
   viewBoxWidth: number
   viewBoxHeight: number
@@ -113,18 +121,22 @@ export function WorldMap({
 
         {countries && (
           <g aria-hidden="true">
-            {countries.features.map((f: CountryFeature) => (
-              <path
-                key={f.id ?? f.properties.name}
-                d={path(f) ?? undefined}
-                className="transition-colors duration-100"
-                fill={hover?.name === f.properties.name ? 'rgba(79,209,197,0.16)' : 'rgba(255,255,255,0.035)'}
-                stroke="#232b32"
-                strokeWidth={0.6}
-                onMouseMove={(e) => setHover({ name: f.properties.name, x: e.clientX, y: e.clientY })}
-                onMouseLeave={() => setHover(null)}
-              />
-            ))}
+            {countries.features.map((f: CountryFeature) => {
+              const continent = COUNTRY_CONTINENT[f.properties.name] ?? 'other'
+              const isHovered = hover?.name === f.properties.name
+              return (
+                <path
+                  key={f.id ?? f.properties.name}
+                  d={path(f) ?? undefined}
+                  className="transition-colors duration-100"
+                  fill={isHovered ? CONTINENT_FILL_HOVER[continent] : CONTINENT_FILL[continent]}
+                  stroke="#232b32"
+                  strokeWidth={0.6}
+                  onMouseMove={(e) => setHover({ name: f.properties.name, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setHover(null)}
+                />
+              )
+            })}
           </g>
         )}
 
@@ -162,6 +174,7 @@ export function WorldMap({
               >
                 {pulsing && <circle r={12} fill="none" stroke={fill} strokeWidth={2.5} className="motion-safe:animate-ping" opacity={0.5} />}
                 <circle
+                  ref={(el) => onDotRef?.(site.code, el)}
                   r={7}
                   fill={fill}
                   stroke={isSelected ? 'var(--color-accent)' : '#0a0c0f'}
@@ -184,6 +197,7 @@ export function WorldMap({
           style={{ left: hover.x, top: hover.y }}
         >
           {hover.name}
+          {COUNTRY_NAME_ZH[hover.name] && <span className="text-neutral-400"> {COUNTRY_NAME_ZH[hover.name]}</span>}
         </div>
       )}
     </div>

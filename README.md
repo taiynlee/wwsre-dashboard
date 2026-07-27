@@ -233,7 +233,7 @@ cd admin-frontend && npm test      # Vitest,元件測試(4 個)
 2. **Backend 唯讀資料層**——`GrafanaClient`、TTL cache、整合登錄表與即時 SLO 的 `slo_service`
 3. **Public API**——`/api/public/sites`、`/sites/{code}/clusters`、`/categories`、`/trend`、`/clusters/{id}/live`
 4. **Admin API**——site 的 CRUD、per-site per-category SLO 設定讀寫,port 8001
-5. **主看板前端**——世界地圖(`d3-geo` + 真實 topojson,動態投影與版面配置)、KPI 列、趨勢圖、site 卡片網格(右側固定張數 + 下方其餘,地圖與選點連線互動)
+5. **主看板前端**——世界地圖(`d3-geo` + 真實 topojson,動態投影與版面配置,國家依五大洲上色,滑鼠移到國家上顯示中英文名稱)、KPI 列、趨勢圖、site 卡片網格(右側固定張數 + 下方其餘,地圖與選點連線互動,連線起點精準對齊圖上的圓點)、整頁等比例縮放(`ScaleToFit`,視窗變窄時文字與版面同步縮小,不跑版)
 6. **後台管理前端**——卡片式 CRUD、每個 site 可展開設定 9 個 category 各自的 target 與是否計入平均、無登入機制、獨立打包
 7. **打磨**——Grafana 連不上時的優雅降級(回傳最後一次快取資料並標記 `stale`)、響應式與無障礙檢查、測試
 8. **部署**——單一 Docker image(public `/` + admin `/admin` + 兩個 backend,見上方[部署](#部署docker-image))
