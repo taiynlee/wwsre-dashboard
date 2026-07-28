@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { geoPath, type GeoProjection } from 'd3-geo'
 import { feature } from 'topojson-client'
 import type { Topology, GeometryCollection } from 'topojson-specification'
@@ -35,6 +35,23 @@ export function WorldMap({
 }) {
   const [countries, setCountries] = useState<FeatureCollection<Geometry, { name: string }> | null>(null)
   const [hover, setHover] = useState<{ name: string; x: number; y: number } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // The page-wide ScaleToFit wrapper applies a CSS transform above this
+  // component, which changes what `position: fixed` descendants anchor to
+  // (per spec, a transformed ancestor becomes their containing block instead
+  // of the viewport) — so raw e.clientX/clientY no longer lines up. Position
+  // the tooltip relative to this container instead, converting screen pixels
+  // to the container's own (unscaled) coordinate space via the ratio between
+  // its rendered size and its layout size — that ratio equals the current
+  // scale factor regardless of where it came from.
+  const setHoverFromEvent = (name: string, e: { clientX: number; clientY: number }) => {
+    const el = containerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const scale = rect.width / el.offsetWidth || 1
+    setHover({ name, x: (e.clientX - rect.left) / scale, y: (e.clientY - rect.top) / scale })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -99,7 +116,7 @@ export function WorldMap({
   }, [sites, projection])
 
   return (
-    <div className="relative h-full">
+    <div ref={containerRef} className="relative h-full">
       {/* Not role="img" on the svg — that would flatten the interactive pins
           out of the accessibility tree. This is a labeled group of real controls. */}
       <svg
@@ -132,7 +149,7 @@ export function WorldMap({
                   fill={isHovered ? CONTINENT_FILL_HOVER[continent] : CONTINENT_FILL[continent]}
                   stroke="#232b32"
                   strokeWidth={0.6}
-                  onMouseMove={(e) => setHover({ name: f.properties.name, x: e.clientX, y: e.clientY })}
+                  onMouseMove={(e) => setHoverFromEvent(f.properties.name, e)}
                   onMouseLeave={() => setHover(null)}
                 />
               )
@@ -193,7 +210,7 @@ export function WorldMap({
 
       {hover && (
         <div
-          className="pointer-events-none fixed z-10 -translate-x-1/2 -translate-y-[calc(100%+10px)] rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs font-medium whitespace-nowrap text-neutral-200 shadow-lg"
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+10px)] rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs font-medium whitespace-nowrap text-neutral-200 shadow-lg"
           style={{ left: hover.x, top: hover.y }}
         >
           {hover.name}
