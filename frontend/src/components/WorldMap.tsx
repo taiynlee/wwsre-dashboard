@@ -7,6 +7,7 @@ import type { SiteStatus } from '../lib/types'
 import { TIER_FILL, TIER_LABEL } from '../lib/tier'
 import { CONTINENT_FILL, CONTINENT_FILL_HOVER, COUNTRY_CONTINENT } from '../lib/continents'
 import { COUNTRY_NAME_ZH } from '../lib/countryNamesZh'
+import { OCEAN_NAME_ZH, classifyOcean } from '../lib/oceans'
 
 type CountryFeature = Feature<Geometry, { name: string }>
 
@@ -36,6 +37,7 @@ export function WorldMap({
   const [countries, setCountries] = useState<FeatureCollection<Geometry, { name: string }> | null>(null)
   const [hover, setHover] = useState<{ name: string; x: number; y: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
 
   // The page-wide ScaleToFit wrapper applies a CSS transform above this
   // component, which changes what `position: fixed` descendants anchor to
@@ -51,6 +53,34 @@ export function WorldMap({
     const rect = el.getBoundingClientRect()
     const scale = rect.width / el.offsetWidth || 1
     setHover({ name, x: (e.clientX - rect.left) / scale, y: (e.clientY - rect.top) / scale })
+  }
+
+  // There's no ocean geometry to hit-test the way country <path>s are, so
+  // hovering water instead maps the cursor back to lon/lat (via the SVG's
+  // own viewBox <-> rendered-box transform, since preserveAspectRatio may
+  // letterbox it independently of ScaleToFit's own scaling) and buckets
+  // that into a coarse ocean name.
+  const handleOceanHover = (e: { clientX: number; clientY: number }) => {
+    const svg = svgRef.current
+    if (!svg || !projection.invert) return
+    const svgRect = svg.getBoundingClientRect()
+    const svgAspect = svgRect.width / svgRect.height
+    const viewBoxAspect = viewBoxWidth / viewBoxHeight
+    let scale: number
+    let offsetX = 0
+    let offsetY = 0
+    if (svgAspect > viewBoxAspect) {
+      scale = svgRect.height / viewBoxHeight
+      offsetX = (svgRect.width - viewBoxWidth * scale) / 2
+    } else {
+      scale = svgRect.width / viewBoxWidth
+      offsetY = (svgRect.height - viewBoxHeight * scale) / 2
+    }
+    const viewBoxX = (e.clientX - svgRect.left - offsetX) / scale
+    const viewBoxY = (e.clientY - svgRect.top - offsetY) / scale
+    const geo = projection.invert([viewBoxX, viewBoxY])
+    if (!geo) return
+    setHoverFromEvent(classifyOcean(geo[0], geo[1]), e)
   }
 
   useEffect(() => {
@@ -120,6 +150,7 @@ export function WorldMap({
       {/* Not role="img" on the svg — that would flatten the interactive pins
           out of the accessibility tree. This is a labeled group of real controls. */}
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
         preserveAspectRatio="xMidYMid meet"
         className="block h-full w-full"
@@ -136,6 +167,23 @@ export function WorldMap({
           </filter>
         </defs>
 
+        {/* Sits beneath the country paths, so land clicks/hovers still hit
+            those first — only mouse positions not covered by any country
+            polygon (i.e. water) fall through to this and get bucketed into
+            an ocean name. pointerEvents="all" makes it hit-testable despite
+            the transparent fill (SVG's default visiblePainted hit-testing
+            would otherwise skip a fully transparent shape). */}
+        <rect
+          x={0}
+          y={0}
+          width={viewBoxWidth}
+          height={viewBoxHeight}
+          fill="transparent"
+          pointerEvents="all"
+          onMouseMove={handleOceanHover}
+          onMouseLeave={() => setHover(null)}
+        />
+
         {countries && (
           <g aria-hidden="true">
             {countries.features.map((f: CountryFeature) => {
@@ -147,7 +195,7 @@ export function WorldMap({
                   d={path(f) ?? undefined}
                   className="transition-colors duration-100"
                   fill={isHovered ? CONTINENT_FILL_HOVER[continent] : CONTINENT_FILL[continent]}
-                  stroke="#232b32"
+                  stroke="#4a5a66"
                   strokeWidth={0.6}
                   onMouseMove={(e) => setHoverFromEvent(f.properties.name, e)}
                   onMouseLeave={() => setHover(null)}
@@ -214,7 +262,9 @@ export function WorldMap({
           style={{ left: hover.x, top: hover.y }}
         >
           {hover.name}
-          {COUNTRY_NAME_ZH[hover.name] && <span className="text-neutral-400"> {COUNTRY_NAME_ZH[hover.name]}</span>}
+          {(COUNTRY_NAME_ZH[hover.name] ?? OCEAN_NAME_ZH[hover.name]) && (
+            <span className="text-neutral-400"> {COUNTRY_NAME_ZH[hover.name] ?? OCEAN_NAME_ZH[hover.name]}</span>
+          )}
         </div>
       )}
     </div>

@@ -6,8 +6,8 @@ export function KpiRow({ sites, clusterCount }: { sites: SiteStatus[]; clusterCo
   const breaching = withData.filter((s) => s.tier === 'crit' || s.tier === 'warn').length
 
   const tiles = [
-    { label: 'Sites monitored', value: String(sites.length), sub: `${withData.length} reporting`, tone: '' },
-    { label: 'Clusters monitored', value: clusterCount === undefined ? '—' : String(clusterCount), sub: 'reporting into slo table', tone: '' },
+    { label: 'Sites monitored', value: String(sites.length), sub: `${withData.length} reporting`, tone: 'text-accent-strong' },
+    { label: 'Clusters monitored', value: clusterCount === undefined ? '—' : String(clusterCount), sub: 'reporting into slo table', tone: 'text-warn' },
     { label: 'Meeting target', value: `${meeting} / ${sites.length}`, sub: '≥ target this week', tone: 'text-good' },
     { label: 'Breaching SLO', value: `${breaching} / ${sites.length}`, sub: 'warn + crit tiers', tone: 'text-crit' },
   ]

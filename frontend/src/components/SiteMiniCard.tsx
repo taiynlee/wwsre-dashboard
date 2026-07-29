@@ -31,7 +31,7 @@ export function SiteMiniCard({ site, selected, onSelect }: { site: SiteStatus; s
       </div>
 
       <div className="truncate text-[9.5px] leading-tight text-neutral-400">
-        {site.country} · {site.cluster_count} cluster{site.cluster_count === 1 ? '' : 's'}
+        {site.country} · <span className="text-warn font-semibold">{site.cluster_count}</span> cluster{site.cluster_count === 1 ? '' : 's'}
       </div>
 
       <div className="flex items-baseline justify-between">
