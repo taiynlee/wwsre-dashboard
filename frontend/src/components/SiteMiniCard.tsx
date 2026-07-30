@@ -1,11 +1,34 @@
+import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ExternalLink } from 'lucide-react'
 import type { SiteStatus } from '../lib/types'
 import { StatusPill } from './StatusPill'
 import { Sparkline } from './Sparkline'
 
+/** No real timezone database here — just longitude — so this is the
+ * standard 15°-per-hour approximation, not an authoritative admin timezone. */
+function approxUtcOffset(longitude: number): number {
+  return Math.round(longitude / 15)
+}
+
+/** `Date#getTime()` is already a timezone-agnostic UTC epoch, so shifting it
+ * by the offset and reading back with the UTC getters gives the wall-clock
+ * date/time at that offset regardless of the browser's own local timezone. */
+function formatLocalDateTime(nowMillis: number, offset: number): string {
+  const shifted = new Date(nowMillis + offset * 3_600_000)
+  const hh = String(shifted.getUTCHours()).padStart(2, '0')
+  const mm = String(shifted.getUTCMinutes()).padStart(2, '0')
+  return `${shifted.getUTCFullYear()}/${shifted.getUTCMonth() + 1}/${shifted.getUTCDate()} ${hh}:${mm}`
+}
+
 export function SiteMiniCard({ site, selected, onSelect }: { site: SiteStatus; selected: boolean; onSelect: () => void }) {
   const valueText = site.current_pct === null ? '—' : `${site.current_pct.toFixed(1)}%`
+
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(id)
+  }, [])
 
   return (
     <div
@@ -41,8 +64,10 @@ export function SiteMiniCard({ site, selected, onSelect }: { site: SiteStatus; s
 
       <Sparkline series={site.history} tier={site.tier} height={18} />
 
-      <div className="flex items-center justify-between border-t border-dashed border-neutral-800 pt-1">
-        <span className="font-mono text-[8.5px] text-neutral-500">{site.history.length > 0 ? 'history window' : 'awaiting report'}</span>
+      <div className="flex items-baseline justify-between border-t border-dashed border-neutral-800 pt-1">
+        <span className="font-mono text-[7.5px] whitespace-nowrap text-neutral-500">
+          local time {formatLocalDateTime(now, approxUtcOffset(site.longitude))}
+        </span>
         <Link
           to="/sites/$code"
           params={{ code: site.code }}
