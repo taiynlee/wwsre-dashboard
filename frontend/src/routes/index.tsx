@@ -92,18 +92,23 @@ function Overview() {
 
   return (
     <AppShell>
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-5 border-b border-neutral-900 pb-5">
-        <div className="flex items-center gap-3">
+      <header className="mb-3 flex flex-wrap items-end justify-between gap-5 border-b border-neutral-900 pb-3">
+        <div className="flex items-center gap-2">
           {/* logo.* is gitignored (confidential) — drop the real file into frontend/public/, hidden if absent */}
           <img
             src="/logo.png"
             alt=""
-            className="h-[28px] w-auto"
+            className="h-[30px] w-auto"
             onError={(e) => {
               e.currentTarget.style.display = 'none'
             }}
           />
-          <h1 className="text-[28px] font-semibold tracking-tight text-balance">World Wide SRE · K8S Service Level Dashboard</h1>
+          <h1 className="flex flex-col">
+            <span className="text-[8px] leading-none font-bold tracking-[0.2em] text-accent-strong uppercase">World Wide SRE</span>
+            <span className="bg-gradient-to-r from-neutral-50 to-accent-strong bg-clip-text text-[19px] leading-none font-bold tracking-tight text-transparent text-balance">
+              K8s Service Level Dashboard
+            </span>
+          </h1>
         </div>
         <div
           className={`flex items-center gap-2 rounded-full border px-3 py-2 font-mono text-xs ${

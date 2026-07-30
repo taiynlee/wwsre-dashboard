@@ -235,7 +235,7 @@ cd admin-frontend && npm test      # Vitest,元件測試(4 個)
 4. **Admin API**——site 的 CRUD、per-site per-category SLO 設定讀寫,port 8001
 5. **主看板前端**——世界地圖(`d3-geo` + 真實 topojson,動態投影與版面配置,國家依五大洲上色,滑鼠移到國家或海洋上都會顯示中英文名稱)、KPI 列、趨勢圖、site 卡片網格(右側固定張數 + 下方其餘,地圖與選點連線互動,連線起點精準對齊圖上的圓點,卡片下方即時顯示該 site 的概算當地時間——以經度概算 UTC 偏移,非真正的行政時區)、整頁等比例縮放(`ScaleToFit`,視窗變窄時文字與版面同步縮小,不跑版)
 6. **後台管理前端**——卡片式 CRUD、每個 site 可展開設定 9 個 category 各自的 target 與是否計入平均、無登入機制、獨立打包
-7. **打磨**——Grafana 連不上時的優雅降級(回傳最後一次快取資料並標記 `stale`)、響應式與無障礙檢查、測試
+7. **打磨**——Grafana 連不上時的優雅降級(回傳最後一次快取資料並標記 `stale`)、響應式與無障礙檢查、測試、主看板與後台標題視覺統一(漸層主標題 + 強調色小標)
 8. **部署**——單一 Docker image(public `/` + admin `/admin` + 兩個 backend,見上方[部署](#部署docker-image))
 
 ## 待確認事項
