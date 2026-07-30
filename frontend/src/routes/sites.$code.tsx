@@ -63,22 +63,10 @@ function SiteDetail() {
           {clustersQuery.isError && <p className="font-mono text-sm text-crit">Couldn't load cluster detail.</p>}
           {clustersQuery.data?.length === 0 && <p className="font-mono text-sm text-neutral-500">No clusters reporting for this site yet.</p>}
           {clustersQuery.data && clustersQuery.data.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900 shadow-lg shadow-black/30">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-neutral-800 text-[11px] tracking-wide text-neutral-500 uppercase">
-                    <th className="px-4 py-3 font-semibold">Cluster ID</th>
-                    <th className="px-4 py-3 font-semibold">Current SLO</th>
-                    <th className="px-4 py-3 font-semibold">Status</th>
-                    <th className="px-4 py-3 font-semibold">Live detail</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clustersQuery.data.map((cluster) => (
-                    <ClusterRow key={cluster.cluster_id} clusterId={cluster.cluster_id} currentPct={cluster.current_pct} tier={cluster.tier} />
-                  ))}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {clustersQuery.data.map((cluster) => (
+                <ClusterCard key={cluster.cluster_id} clusterId={cluster.cluster_id} currentPct={cluster.current_pct} tier={cluster.tier} />
+              ))}
             </div>
           )}
         </>
@@ -98,17 +86,17 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-function ClusterRow({ clusterId, currentPct, tier }: { clusterId: string; currentPct: number | null; tier: 'good' | 'warn' | 'crit' | 'unknown' }) {
+function ClusterCard({ clusterId, currentPct, tier }: { clusterId: string; currentPct: number | null; tier: 'good' | 'warn' | 'crit' | 'unknown' }) {
   const liveQuery = useQuery({ queryKey: ['cluster-live', clusterId], queryFn: () => fetchClusterLive(clusterId) })
 
   return (
-    <tr className="border-b border-neutral-900 last:border-0">
-      <td className="px-4 py-3 font-mono text-[13px]">{clusterId}</td>
-      <td className="px-4 py-3 font-mono tabular-nums">{currentPct === null ? '—' : `${currentPct.toFixed(1)}%`}</td>
-      <td className="px-4 py-3">
-        <StatusPill tier={tier} />
-      </td>
-      <td className="px-4 py-3">
+    <div className="flex flex-col gap-2.5 rounded-xl border border-neutral-800 bg-neutral-900 p-4 shadow-lg shadow-black/30">
+      <div className="flex items-start justify-between gap-2">
+        <span className="truncate font-mono text-[13px] font-semibold">{clusterId}</span>
+        <StatusPill tier={tier} compact />
+      </div>
+      <div className="font-mono text-xl font-semibold tabular-nums">{currentPct === null ? '—' : `${currentPct.toFixed(1)}%`}</div>
+      <div>
         {liveQuery.data?.available ? (
           <span className="font-mono text-[11px] text-good">live metrics available</span>
         ) : liveQuery.data?.external_url ? (
@@ -123,7 +111,7 @@ function ClusterRow({ clusterId, currentPct, tier }: { clusterId: string; curren
         ) : (
           <span className="text-[11px] text-neutral-600">no link on record</span>
         )}
-      </td>
-    </tr>
+      </div>
+    </div>
   )
 }
