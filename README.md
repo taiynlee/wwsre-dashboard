@@ -6,7 +6,7 @@
 
 ## 目前狀態
 
-功能已完整實作並可部署(見下方[部署](#部署docker-image)):Public API、Admin API、主看板前端、後台管理前端都做完,後端 38 個測試、前後台前端共 13 個元件測試全過。逐項可勾選的實作紀錄在 [plan.md](plan.md)。
+功能已完整實作並可部署(見下方[部署](#部署docker-image)):Public API、Admin API、主看板前端、後台管理前端都做完,後端 40 個測試、前後台前端共 11 個元件測試全過。逐項可勾選的實作紀錄在 [plan.md](plan.md)。
 
 ## 為什麼要做這個
 
@@ -104,7 +104,7 @@ CREATE TABLE site_category_targets (
 
 初始資料由 `backend/app/seed.py` 灌入,實際內容讀取自 `backend/site_registry.seed.json`(gitignored,機密——見上方[資料來源](#資料來源))。首次設定時複製 `backend/site_registry.seed.example.json` 為 `site_registry.seed.json` 並填入真實 site 清單;也可以不跑 seed script,直接在後台 `/admin` 頁面手動新增 site。
 
-**為什麼「目前 SLO」是分類平均,不是直接抓 Grafana 現成的彙總值**:早期版本直接用 `slo` 表裡「整個 site 當週最小值」當作目前 SLO,結果曾經發生某個 category(如 ArgoCD)當週實際出問題,但因為判斷「這週資料是否完整」的邏輯只看數值是不是剛好 0,把那週的異常資料整個當成「還沒跑完」略過不採計,導致主看板卡片跟地圖燈號完全沒反映出這個真實異常。改成「取有勾選的分類做平均」之後,這個問題不會再發生,而且哪些分類要不要算進site的 SLO、各自的 target 是多少,都能在後台 `/admin` 頁面每個 site 卡片的 Edit 裡直接設定。
+**為什麼「目前 SLO」是「該 site 底下最差 cluster 的分數」,不是分類平均**:早期版本用「有勾選的分類做平均」,理由是避免「整個 site 當週最小值」那種算法在資料不完整時被誤判成還沒跑完而整週略過不採計。但分類平均本身也有一個問題:只要其他分類夠好,單一 cluster 表現不佳會被平均掉,site 卡片跟地圖燈號會顯示「一切正常」,實際上底下某個 cluster 已經在飄零,實際發生過某個 site 六個 cluster 裡有一個明顯偏低,但分類平均後 site 卡片仍顯示接近 100%,問題完全看不出來。現在改成「該 site 所有 cluster 裡,最新一天分數最差的那一個」,site 卡片、地圖燈號、KPI「Meeting target / Breaching SLO」計數、detail 頁面的 Current SLO 全部套用同一套邏輯,不會再被平均掩蓋。哪個 cluster、哪個 category 拖累分數,可以在 site detail 頁面把滑鼠移到該 cluster 卡片上看 tooltip(呼叫 `/api/public/clusters/{cluster_id}/categories`)。趨勢圖(`history`)仍然是分類週平均,只用來看長期走勢,跟「目前」這個數字是兩件事。
 
 ## 環境變數(`backend/.env`)
 
@@ -163,9 +163,10 @@ Dockerfile                        # repo 根目錄,單一 image 三階段 build
 
 | Method | Path | 回傳內容 |
 |---|---|---|
-| GET | `/api/public/sites` | 全部啟用中的 site:代碼、城市、國家、經緯度、目前 SLO(有勾選分類的平均)、target(同一組分類的 target 平均)、燈號狀態、近期歷史序列、cluster 數量 |
+| GET | `/api/public/sites` | 全部啟用中的 site:代碼、城市、國家、經緯度、目前 SLO(該 site 所有 cluster 裡最新一天分數最差的那一個)、target(有勾選分類的 target 平均)、燈號狀態、近期歷史序列(分類週平均趨勢)、cluster 數量 |
 | GET | `/api/public/sites/{code}/clusters` | 該 site 底下各 cluster 的 SLO 明細(跟該 site 自己的 target 比較) |
-| GET | `/api/public/sites/{code}/categories` | 該 site 各分類(K8S-Node/ETCD/...)最新一筆的平均與最差 SLO,各自對應該分類在後台設定的 target |
+| GET | `/api/public/sites/{code}/categories` | 該 site 各分類(K8S-Node/ETCD/...)最新一筆的平均與最差 SLO,各自對應該分類在後台設定的 target(目前前端沒有畫面用到,取而代之的是下面單一 cluster 的版本) |
+| GET | `/api/public/clusters/{cluster_id}/categories` | **單一 cluster** 自己最新一天的各分類 SLO,target 沿用該 cluster 所屬 site 的後台設定——site detail 頁面 hover 每張 cluster 卡片跳出的 tooltip 就是這支 API |
 | GET | `/api/public/categories` | 全域各分類(K8S-Node/ETCD/...)的平均與最差 SLO(跨所有 site,固定用全域預設 target 99.0%) |
 | GET | `/api/public/trend` | 全站週趨勢(平均值序列) |
 | GET | `/api/public/clusters/{id}/live` | 即時 SLI(僅本地 cluster 有效;其餘回傳 `{"available": false, "external_url": "..."}`) |
@@ -210,8 +211,8 @@ npm run dev            # 另一個 Vite port,如 http://localhost:5174
 **測試**
 
 ```bash
-cd backend && uv run pytest        # 38 個測試
-cd frontend && npm test            # Vitest,元件測試(9 個)
+cd backend && uv run pytest        # 40 個測試
+cd frontend && npm test            # Vitest,元件測試(7 個)
 cd admin-frontend && npm test      # Vitest,元件測試(4 個)
 ```
 
@@ -233,7 +234,7 @@ cd admin-frontend && npm test      # Vitest,元件測試(4 個)
 2. **Backend 唯讀資料層**——`GrafanaClient`、TTL cache、整合登錄表與即時 SLO 的 `slo_service`
 3. **Public API**——`/api/public/sites`、`/sites/{code}/clusters`、`/categories`、`/trend`、`/clusters/{id}/live`
 4. **Admin API**——site 的 CRUD、per-site per-category SLO 設定讀寫,port 8001
-5. **主看板前端**——世界地圖(`d3-geo` + 真實 topojson,動態投影與版面配置,國家依五大洲上色,滑鼠移到國家或海洋上都會顯示中英文名稱)、KPI 列、趨勢圖、site 卡片網格(右側固定張數 + 下方其餘,地圖與選點連線互動,連線起點精準對齊圖上的圓點,卡片下方即時顯示該 site 的概算當地時間——以經度概算 UTC 偏移,非真正的行政時區)、整頁等比例縮放(`ScaleToFit`,視窗變窄時文字與版面同步縮小,不跑版)
+5. **主看板前端**——世界地圖(`d3-geo` + 真實 topojson,動態投影與版面配置,國家依五大洲上色,滑鼠移到國家或海洋上都會顯示中英文名稱)、KPI 列、趨勢圖、site 卡片網格(右側固定張數 + 下方其餘,地圖與選點連線互動,連線起點精準對齊圖上的圓點,卡片下方即時顯示該 site 的概算當地時間——以經度概算 UTC 偏移,非真正的行政時區)、整頁等比例縮放(`ScaleToFit`,視窗變窄時文字與版面同步縮小,不跑版,垂直方向不裁切超出正常版面高度的內容如 hover tooltip)、site detail 頁面每張 cluster 卡片 hover 顯示該 cluster 自己 9 個分類的圓環分數
 6. **後台管理前端**——卡片式 CRUD、每個 site 可展開設定 9 個 category 各自的 target 與是否計入平均、無登入機制、獨立打包
 7. **打磨**——Grafana 連不上時的優雅降級(回傳最後一次快取資料並標記 `stale`)、響應式與無障礙檢查、測試、主看板與後台標題視覺統一(漸層主標題 + 強調色小標)
 8. **部署**——單一 Docker image(public `/` + admin `/admin` + 兩個 backend,見上方[部署](#部署docker-image))

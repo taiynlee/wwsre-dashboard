@@ -25,8 +25,8 @@ export async function fetchCategories(): Promise<CategoryHealth[]> {
   return data
 }
 
-export async function fetchSiteCategories(code: string): Promise<CategoryHealth[]> {
-  const { data } = await api.get<CategoryHealth[]>(`/api/public/sites/${code}/categories`)
+export async function fetchClusterCategories(clusterId: string): Promise<CategoryHealth[]> {
+  const { data } = await api.get<CategoryHealth[]>(`/api/public/clusters/${clusterId}/categories`)
   return data
 }
 

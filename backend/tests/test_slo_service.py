@@ -26,6 +26,12 @@ async def test_joins_history_and_computes_tier():
                 {"site": "bbb", "category": "K8S-Node", "create_at": "2026-06-08", "avgslo": 54.3, "n": 2},
             ],
             [
+                {"cluster_id": "aaa-01", "site": "aaa", "create_at": "2026-06-01", "slo": 99.5},
+                {"cluster_id": "aaa-01", "site": "aaa", "create_at": "2026-06-08", "slo": 99.8},
+                {"cluster_id": "bbb-01", "site": "bbb", "create_at": "2026-06-01", "slo": 99.3},
+                {"cluster_id": "bbb-01", "site": "bbb", "create_at": "2026-06-08", "slo": 54.3},
+            ],
+            [
                 {"site": "aaa", "n": 3},
                 {"site": "bbb", "n": 5},
             ],
@@ -69,29 +75,9 @@ async def test_trailing_week_with_few_rows_is_treated_as_still_accumulating():
                 {"site": "aaa", "category": "K8S-Node", "create_at": "2026-06-08", "avgslo": 99.8, "n": 14},
                 {"site": "aaa", "category": "K8S-Node", "create_at": "2026-06-15", "avgslo": 50.0, "n": 2},
             ],
-            [{"site": "aaa", "n": 1}],
-            [{"category": "K8S-Node"}],
-        ]
-    )
-
-    result = (await get_sites_overview(grafana, datasource_uid="test-uid")).value
-
-    assert result[0].current_pct == 99.8
-    assert result[0].history == [99.5, 99.8]
-
-
-async def test_a_genuinely_bad_week_is_not_hidden_just_because_the_value_is_low():
-    """Regression guard: a real category outage must still show up in
-    'current' as long as that week reported a normal number of rows — only
-    row COUNT (not the value itself) should decide whether a week looks
-    incomplete."""
-    await init_db()
-    await insert_site("AAA", "aaa")
-    grafana = FakeGrafanaClient(
-        sql_rows_sequence=[
             [
-                {"site": "aaa", "category": "K8S-Node", "create_at": "2026-06-01", "avgslo": 99.5, "n": 14},
-                {"site": "aaa", "category": "K8S-Node", "create_at": "2026-06-08", "avgslo": 0.0, "n": 14},
+                {"cluster_id": "aaa-01", "site": "aaa", "create_at": "2026-06-01", "slo": 99.5},
+                {"cluster_id": "aaa-01", "site": "aaa", "create_at": "2026-06-08", "slo": 99.8},
             ],
             [{"site": "aaa", "n": 1}],
             [{"category": "K8S-Node"}],
@@ -100,5 +86,41 @@ async def test_a_genuinely_bad_week_is_not_hidden_just_because_the_value_is_low(
 
     result = (await get_sites_overview(grafana, datasource_uid="test-uid")).value
 
+    # current_pct comes from the separate per-cluster query, not from
+    # `history` — this test is really about the trailing-week heuristic
+    # below, so current_pct here is just whatever the per-cluster mock's
+    # latest row says.
+    assert result[0].current_pct == 99.8
+    assert result[0].history == [99.5, 99.8]
+
+
+async def test_a_genuinely_bad_week_is_not_hidden_just_because_the_value_is_low():
+    """Regression guard: a real category outage must still show up in
+    `history` as long as that week reported a normal number of rows — only
+    row COUNT (not the value itself) should decide whether a week looks
+    incomplete. (`current_pct` itself comes from the separate per-cluster
+    query below, unfiltered — see get_sites_overview's docstring — so it
+    reflects a bad day unconditionally; this test's real subject is
+    `history`.)"""
+    await init_db()
+    await insert_site("AAA", "aaa")
+    grafana = FakeGrafanaClient(
+        sql_rows_sequence=[
+            [
+                {"site": "aaa", "category": "K8S-Node", "create_at": "2026-06-01", "avgslo": 99.5, "n": 14},
+                {"site": "aaa", "category": "K8S-Node", "create_at": "2026-06-08", "avgslo": 0.0, "n": 14},
+            ],
+            [
+                {"cluster_id": "aaa-01", "site": "aaa", "create_at": "2026-06-01", "slo": 99.5},
+                {"cluster_id": "aaa-01", "site": "aaa", "create_at": "2026-06-08", "slo": 0.0},
+            ],
+            [{"site": "aaa", "n": 1}],
+            [{"category": "K8S-Node"}],
+        ]
+    )
+
+    result = (await get_sites_overview(grafana, datasource_uid="test-uid")).value
+
+    assert result[0].history == [99.5, 0.0]
     assert result[0].current_pct == 0.0
     assert result[0].tier == "crit"

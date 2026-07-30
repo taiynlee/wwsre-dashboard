@@ -37,7 +37,18 @@ export function ScaleToFit({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <div ref={outerRef} style={{ height: naturalHeight * scale || undefined, overflow: 'hidden' }}>
+    <div
+      ref={outerRef}
+      // overflowX hidden crops the unscaled DESIGN_WIDTH inner div down to
+      // whatever's actually available (its layout width doesn't shrink just
+      // because it's visually transformed, so without this it'd force a
+      // horizontal scrollbar). overflowY stays visible so content that
+      // deliberately extends past normal flow height — a hover tooltip, a
+      // dropdown — isn't clipped just because it wasn't part of the
+      // ResizeObserver's last naturalHeight measurement (that measurement
+      // tracks box size, not scrollHeight-style overflow from descendants).
+      style={{ height: naturalHeight * scale || undefined, overflowX: 'hidden', overflowY: 'visible' }}
+    >
       <div
         ref={innerRef}
         style={{ width: DESIGN_WIDTH, marginLeft, transform: `scale(${scale})`, transformOrigin: 'top left' }}

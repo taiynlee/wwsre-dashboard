@@ -1,11 +1,14 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
-import { fetchClusterLive, fetchSiteCategories, fetchSiteClusters, fetchSites } from '../lib/api'
+import { fetchClusterCategories, fetchClusterLive, fetchSiteClusters, fetchSites } from '../lib/api'
 import { AppShell } from '../components/AppShell'
 import { StatusPill } from '../components/StatusPill'
 import { Sparkline } from '../components/Sparkline'
-import { CategoryRings } from '../components/CategoryRings'
+import { TIER_FILL } from '../lib/tier'
+
+const RING_R = 17
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R
 
 export const Route = createFileRoute('/sites/$code')({
   component: SiteDetail,
@@ -16,7 +19,6 @@ function SiteDetail() {
 
   const sitesQuery = useQuery({ queryKey: ['sites'], queryFn: fetchSites })
   const clustersQuery = useQuery({ queryKey: ['site-clusters', code], queryFn: () => fetchSiteClusters(code) })
-  const categoriesQuery = useQuery({ queryKey: ['site-categories', code], queryFn: () => fetchSiteCategories(code) })
 
   const site = sitesQuery.data?.sites.find((s) => s.code === code)
 
@@ -49,15 +51,6 @@ function SiteDetail() {
             </div>
           </div>
 
-          <h2 className="mb-3 text-[15px] font-semibold">Category breakdown</h2>
-          {categoriesQuery.isPending && <p className="font-mono text-sm text-neutral-500">Loading categories…</p>}
-          {categoriesQuery.isError && <p className="font-mono text-sm text-crit">Couldn't load category breakdown.</p>}
-          {categoriesQuery.data && (
-            <div className="mb-6 rounded-xl border border-neutral-800 bg-neutral-900 shadow-lg shadow-black/30">
-              <CategoryRings categories={categoriesQuery.data} />
-            </div>
-          )}
-
           <h2 className="mb-3 text-[15px] font-semibold">Clusters</h2>
           {clustersQuery.isPending && <p className="font-mono text-sm text-neutral-500">Loading clusters…</p>}
           {clustersQuery.isError && <p className="font-mono text-sm text-crit">Couldn't load cluster detail.</p>}
@@ -88,9 +81,10 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function ClusterCard({ clusterId, currentPct, tier }: { clusterId: string; currentPct: number | null; tier: 'good' | 'warn' | 'crit' | 'unknown' }) {
   const liveQuery = useQuery({ queryKey: ['cluster-live', clusterId], queryFn: () => fetchClusterLive(clusterId) })
+  const categoriesQuery = useQuery({ queryKey: ['cluster-categories', clusterId], queryFn: () => fetchClusterCategories(clusterId) })
 
   return (
-    <div className="flex flex-col gap-2.5 rounded-xl border border-neutral-800 bg-neutral-900 p-4 shadow-lg shadow-black/30">
+    <div className="group relative flex flex-col gap-2.5 rounded-xl border border-neutral-800 bg-neutral-900 p-4 shadow-lg shadow-black/30">
       <div className="flex items-start justify-between gap-2">
         <span className="truncate font-mono text-[13px] font-semibold">{clusterId}</span>
         <StatusPill tier={tier} compact />
@@ -112,6 +106,41 @@ function ClusterCard({ clusterId, currentPct, tier }: { clusterId: string; curre
           <span className="text-[11px] text-neutral-600">no link on record</span>
         )}
       </div>
+
+      {categoriesQuery.data && categoriesQuery.data.length > 0 && (
+        <div className="pointer-events-none absolute top-full left-0 z-20 mt-1.5 w-max min-w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2.5 opacity-0 shadow-xl shadow-black/40 transition-opacity group-hover:opacity-100">
+          <div className="mb-1.5 text-[9px] font-semibold tracking-wide text-neutral-500 uppercase">This cluster, by category</div>
+          <div className="grid grid-cols-3 gap-x-2 gap-y-1.5">
+            {categoriesQuery.data.map((cat) => {
+              const fraction = Math.max(0, Math.min(1, cat.avg_pct / 100))
+              const dash = `${(fraction * RING_CIRCUMFERENCE).toFixed(1)} ${RING_CIRCUMFERENCE.toFixed(1)}`
+              const fill = TIER_FILL[cat.tier]
+              return (
+                <div key={cat.category} className="flex flex-col items-center gap-1">
+                  <svg viewBox="0 0 40 40" className="h-11 w-11">
+                    <circle cx={20} cy={20} r={RING_R} fill="none" stroke="#1c2629" strokeWidth={4} />
+                    <circle
+                      cx={20}
+                      cy={20}
+                      r={RING_R}
+                      fill="none"
+                      stroke={fill}
+                      strokeWidth={4}
+                      strokeLinecap="round"
+                      strokeDasharray={dash}
+                      transform="rotate(-90 20 20)"
+                    />
+                    <text x={20} y={23} textAnchor="middle" className="font-mono text-[8.5px] font-bold" fill={fill}>
+                      {cat.avg_pct.toFixed(1)}
+                    </text>
+                  </svg>
+                  <span className="text-center text-[8px] whitespace-nowrap text-neutral-500">{cat.category.replace(/^K8S-/, '')}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

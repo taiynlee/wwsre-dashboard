@@ -98,6 +98,23 @@ async def get_cluster_count(
     return {"count": result.value}
 
 
+@router.get("/clusters/{cluster_id}/categories")
+async def list_cluster_categories(
+    cluster_id: str,
+    response: Response,
+    grafana: GrafanaClient = Depends(get_grafana_client),
+    settings: Settings = Depends(get_app_settings),
+) -> list[slo_service.CategoryHealth]:
+    try:
+        result = await slo_service.get_cluster_category_health(
+            grafana, settings.grafana_postgres_datasource_uid, cluster_id
+        )
+    except slo_service.SiteNotFoundError:
+        raise HTTPException(status_code=404, detail=f"unknown cluster id: {cluster_id}")
+    _mark_staleness(response, result.stale)
+    return result.value
+
+
 @router.get("/clusters/{cluster_id}/live")
 async def get_cluster_live(
     cluster_id: str,

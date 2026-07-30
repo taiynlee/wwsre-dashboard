@@ -19,6 +19,10 @@ class SiteStatus:
     longitude: float
     target_pct: float
     history: list[float] = field(default_factory=list)  # oldest -> newest, weekly avg of included categories
+    # The worst of this site's clusters' own most recent day (see
+    # get_sites_overview) — deliberately NOT history[-1]/an average, so one
+    # struggling cluster can't be hidden behind the rest of the site looking
+    # fine. tier is derived from this same value.
     current_pct: float | None = None
     tier: str = "unknown"  # good | warn | crit | unknown
     cluster_count: int = 0
@@ -82,6 +86,19 @@ async def _fetch_site_by_code(code: str) -> dict:
         if row is None:
             raise SiteNotFoundError(code)
         return dict(row)
+
+
+async def _fetch_site_by_cluster_id(cluster_id: str) -> dict:
+    """A cluster's owning site isn't stored anywhere explicit — the same
+    `cluster_id like '{prefix}%'` relationship used everywhere else (e.g.
+    get_site_clusters) is the only link, so this just does that match in
+    reverse: find the registered site whose prefix the given cluster_id
+    starts with."""
+    lowered = cluster_id.lower()
+    for row in await _fetch_site_rows():
+        if lowered.startswith(row["cluster_prefix"].lower()):
+            return row
+    raise SiteNotFoundError(cluster_id)
 
 
 async def _fetch_all_category_settings() -> dict[str, dict[str, dict]]:
@@ -164,7 +181,7 @@ async def get_sites_overview(grafana: GrafanaClient, datasource_uid: str) -> Cac
         return CachedResult(value=[], stale=False)
     settings_by_site = await _fetch_all_category_settings()
 
-    async def fetch_grafana() -> tuple[list[dict], list[dict], list[dict]]:
+    async def fetch_grafana() -> tuple[list[dict], list[dict], list[dict], list[dict]]:
         trend_rows = await grafana.query_sql(
             datasource_uid,
             f"""
@@ -175,6 +192,26 @@ async def get_sites_overview(grafana: GrafanaClient, datasource_uid: str) -> Cac
             order by site, create_at
             """,
         )
+        # Per-cluster (not per-category) worst-that-day value, for every
+        # cluster across every site in one batched query — this is the same
+        # "worst category, that cluster's own latest day" shape as
+        # get_site_clusters computes for one site at a time, just grouped by
+        # site here so `current` (see below) can take the worst of those
+        # across a site's own clusters. See that function's current_pct for
+        # why a site's headline number now comes from here instead of the
+        # category-averaged trend: a site can average out to 100% while one
+        # cluster is meaningfully behind, and that shouldn't be invisible on
+        # the overview card / map pin / KPI counts.
+        cluster_current_rows = await grafana.query_sql(
+            datasource_uid,
+            f"""
+            select cluster_id, LEFT(cluster_id, 3) as site, create_at, min(min_slo) as slo
+            from slo
+            where create_at >= current_date - interval '{HISTORY_WINDOW_DAYS} days'
+            group by cluster_id, site, create_at
+            order by cluster_id, create_at
+            """,
+        )
         cluster_count_rows = await grafana.query_sql(
             datasource_uid,
             "select LEFT(cluster_id, 3) as site, count(distinct cluster_id) as n from slo group by site",
@@ -182,10 +219,10 @@ async def get_sites_overview(grafana: GrafanaClient, datasource_uid: str) -> Cac
         category_rows = await grafana.query_sql(
             datasource_uid, "select distinct category from slo order by category"
         )
-        return trend_rows, cluster_count_rows, category_rows
+        return trend_rows, cluster_current_rows, cluster_count_rows, category_rows
 
     grafana_result = await cached(f"grafana:sites-overview:{datasource_uid}", fetch_grafana)
-    trend_rows, cluster_count_rows, category_rows = grafana_result.value
+    trend_rows, cluster_current_rows, cluster_count_rows, category_rows = grafana_result.value
     known_categories = [row["category"] for row in category_rows]
 
     by_prefix: dict[str, dict[int, dict[str, tuple[float, int]]]] = {}
@@ -196,6 +233,14 @@ async def get_sites_overview(grafana: GrafanaClient, datasource_uid: str) -> Cac
             row["n"],
         )
 
+    # prefix -> cluster_id -> [(date, worst-category-that-day), ...]
+    cluster_points_by_prefix: dict[str, dict[str, list[tuple[str, float]]]] = {}
+    for row in cluster_current_rows:
+        prefix = (row["site"] or "").lower()
+        cluster_points_by_prefix.setdefault(prefix, {}).setdefault(row["cluster_id"], []).append(
+            (row["create_at"], row["slo"])
+        )
+
     cluster_count_by_prefix: dict[str, int] = {
         (row["site"] or "").lower(): int(row["n"]) for row in cluster_count_rows
     }
@@ -204,7 +249,11 @@ async def get_sites_overview(grafana: GrafanaClient, datasource_uid: str) -> Cac
     for site in site_rows:
         prefix = site["cluster_prefix"].lower()
         values = _build_site_history(by_prefix.get(prefix, {}), settings_by_site, site["code"])
-        current = values[-1] if values else None
+
+        latest_per_cluster = [
+            sorted(points)[-1][1] for points in cluster_points_by_prefix.get(prefix, {}).values() if points
+        ]
+        current = min(latest_per_cluster) if latest_per_cluster else None
         target = _site_overall_target(settings_by_site, site["code"], known_categories)
 
         statuses.append(
@@ -336,6 +385,53 @@ async def get_site_category_health(
         )
 
     grafana_result = await cached(f"grafana:site-category-health:{prefix}", fetch_grafana)
+    categories = []
+    for row in grafana_result.value:
+        target, _included = _category_setting(settings_by_site, site["code"], row["category"])
+        categories.append(
+            CategoryHealth(
+                category=row["category"],
+                avg_pct=row["avgslo"],
+                worst_pct=row["worst"],
+                tier=_tier_for(row["avgslo"], target),
+                target_pct=target,
+            )
+        )
+    return CachedResult(value=categories, stale=grafana_result.stale)
+
+
+async def get_cluster_category_health(
+    grafana: GrafanaClient, datasource_uid: str, cluster_id: str
+) -> CachedResult:
+    """Per-category SLO breakdown for a single cluster (not a whole site's worth
+    of clusters), for that cluster's own most recent date with real data. Exists
+    because a site's Category breakdown and its individual Cluster cards can
+    legitimately disagree — see get_site_category_health's docstring — so a
+    site-level "100 across every category" doesn't tell you which cluster (or
+    which of its categories) is actually behind a lower cluster-level score.
+    Target lookup reuses the owning site's per-category settings (see
+    _fetch_site_by_cluster_id), same as get_site_category_health."""
+    safe_id = safe_identifier(cluster_id.lower())
+    site = await _fetch_site_by_cluster_id(cluster_id)
+    settings_by_site = await _fetch_all_category_settings()
+
+    async def fetch_grafana() -> list[dict]:
+        return await grafana.query_sql(
+            datasource_uid,
+            f"""
+            select category, avg(min_slo) as avgslo, min(min_slo) as worst
+            from slo
+            where cluster_id = '{safe_id}'
+            and create_at = (
+                select max(create_at) from slo
+                where min_slo > 0 and cluster_id = '{safe_id}'
+            )
+            group by category
+            order by category
+            """,
+        )
+
+    grafana_result = await cached(f"grafana:cluster-category-health:{safe_id}", fetch_grafana)
     categories = []
     for row in grafana_result.value:
         target, _included = _category_setting(settings_by_site, site["code"], row["category"])

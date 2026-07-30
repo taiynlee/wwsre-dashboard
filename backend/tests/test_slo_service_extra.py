@@ -4,6 +4,7 @@ from app.db import init_db
 from app.services.slo_service import (
     SiteNotFoundError,
     get_category_health,
+    get_cluster_category_health,
     get_cluster_count,
     get_global_trend,
     get_site_category_health,
@@ -86,6 +87,37 @@ async def test_get_site_category_health_raises_for_unknown_site():
 
     with pytest.raises(SiteNotFoundError):
         await get_site_category_health(grafana, "test-uid", "NOPE")
+
+
+async def test_get_cluster_category_health_scopes_to_one_cluster():
+    """A site-wide 'everything's 100' breakdown can disagree with any one of
+    its clusters — this is what lets a hovered cluster card show what's
+    actually dragging *that* cluster down."""
+    await init_db()
+    await insert_site("AAA", "aaa")
+    grafana = FakeGrafanaClient(
+        sql_rows=[
+            {"category": "K8S-Node", "avgslo": 100.0, "worst": 100.0},
+            {"category": "K8S-ArgoCD", "avgslo": 97.0, "worst": 90.0},
+        ]
+    )
+
+    result = (await get_cluster_category_health(grafana, "test-uid", "aaa-prd-01")).value
+
+    by_name = {c.category: c for c in result}
+    assert by_name["K8S-Node"].tier == "good"
+    assert by_name["K8S-ArgoCD"].tier == "warn"
+    # exact cluster_id should have been used, not a LIKE prefix match
+    assert "cluster_id = 'aaa-prd-01'" in grafana.sql_calls[0][1]
+
+
+async def test_get_cluster_category_health_raises_for_unknown_cluster_prefix():
+    await init_db()
+    await insert_site("AAA", "aaa")
+    grafana = FakeGrafanaClient()
+
+    with pytest.raises(SiteNotFoundError):
+        await get_cluster_category_health(grafana, "test-uid", "zzz-prd-01")
 
 
 async def test_get_global_trend_drops_trailing_partial_week():

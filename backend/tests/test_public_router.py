@@ -9,8 +9,8 @@ from app.db import get_db as get_db_ctx
 class FlakyGrafanaClient:
     """Succeeds for the first fetch's queries, then fails every call after —
     for exercising the stale-fallback path through a real HTTP round trip.
-    `get_sites_overview` issues three queries per fetch (trend, cluster count,
-    known categories)."""
+    `get_sites_overview` issues four queries per fetch (trend, per-cluster
+    current, cluster count, known categories)."""
 
     def __init__(self) -> None:
         self.call_count = 0
@@ -20,8 +20,10 @@ class FlakyGrafanaClient:
         if self.call_count == 1:
             return [{"site": "aaa", "category": "K8S-Node", "create_at": "2026-06-01", "avgslo": 99.5, "n": 1}]
         if self.call_count == 2:
-            return [{"site": "aaa", "n": 1}]
+            return [{"cluster_id": "aaa-01", "site": "aaa", "create_at": "2026-06-01", "slo": 99.5}]
         if self.call_count == 3:
+            return [{"site": "aaa", "n": 1}]
+        if self.call_count == 4:
             return [{"category": "K8S-Node"}]
         raise RuntimeError("grafana unreachable")
 
