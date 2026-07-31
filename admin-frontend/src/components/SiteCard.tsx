@@ -175,14 +175,15 @@ export function SiteCard({
   }
 
   return (
-    <div className={`flex flex-col gap-3 rounded-xl border bg-neutral-900 p-4 ${site.enabled ? 'border-neutral-800' : 'border-neutral-800 opacity-60'}`}>
+    <div className={`flex flex-col gap-2 rounded-xl border bg-neutral-900 p-3 ${site.enabled ? 'border-neutral-800' : 'border-neutral-800 opacity-60'}`}>
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="font-mono text-[15px] font-bold tracking-wide text-accent-strong">{site.code}</div>
-          <div className="mt-0.5 text-[15.5px] font-semibold">{site.display_name}</div>
-          <div className="text-[11.5px] text-neutral-400">{site.country}</div>
+        <div className="min-w-0">
+          <div className="font-mono text-[13px] font-bold tracking-wide text-accent-strong">{site.code}</div>
+          <div className="truncate text-[13px] font-semibold">
+            {site.display_name} <span className="font-normal text-neutral-500">· {site.country}</span>
+          </div>
         </div>
-        <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-neutral-400">
+        <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[10px] text-neutral-400">
           <input
             type="checkbox"
             checked={site.enabled}
@@ -194,16 +195,14 @@ export function SiteCard({
         </label>
       </div>
 
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[11px] text-neutral-400">
-        <dt className="text-neutral-600">lat/long</dt>
-        <dd>
+      <div className="flex items-center justify-between font-mono text-[10px] text-neutral-500">
+        <span>
           {site.latitude.toFixed(2)}, {site.longitude.toFixed(2)}
-        </dd>
-        <dt className="text-neutral-600">cluster prefix</dt>
-        <dd>{site.cluster_prefix}</dd>
-      </dl>
+        </span>
+        <span>{site.cluster_prefix}</span>
+      </div>
 
-      <div className="flex gap-2 border-t border-dashed border-neutral-800 pt-2.5">
+      <div className="flex gap-2 border-t border-dashed border-neutral-800 pt-2">
         <button onClick={startEdit} className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-accent-strong hover:underline">
           <Pencil size={12} /> Edit
         </button>

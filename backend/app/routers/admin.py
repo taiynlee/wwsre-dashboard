@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.dependencies import get_app_settings, get_grafana_client
 from app.config import Settings
@@ -12,6 +12,16 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 @router.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@router.get("/findings")
+async def list_findings(request: Request) -> dict:
+    """Latest result of the background checker loop (see main_admin.py) —
+    read straight from app.state, not re-run per request."""
+    return {
+        "findings": request.app.state.checker_findings,
+        "last_run": request.app.state.checker_last_run,
+    }
 
 
 @router.get("/sites")

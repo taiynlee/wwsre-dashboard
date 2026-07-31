@@ -4,6 +4,7 @@ import { createSite, deleteSite, fetchSites, updateSite } from './lib/api'
 import type { SiteCreateInput, SiteUpdateInput } from './lib/types'
 import { SiteCard } from './components/SiteCard'
 import { AddSiteCard } from './components/AddSiteCard'
+import { FindingsList } from './components/FindingsList'
 
 function isAxiosErrorWithDetail(err: unknown): err is { response: { data: { detail: string } } } {
   return typeof err === 'object' && err !== null && 'response' in err
@@ -75,6 +76,8 @@ function App() {
             <AddSiteCard onCreate={(input) => createMutation.mutate(input)} isCreating={createMutation.isPending} error={createError} />
           </div>
         )}
+
+        <FindingsList />
       </div>
     </main>
   )

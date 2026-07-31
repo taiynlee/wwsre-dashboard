@@ -41,3 +41,17 @@ export interface SiteCategoryTargetInput {
   target_pct: number
   included: boolean
 }
+
+export interface Finding {
+  severity: 'warn' | 'crit'
+  category: 'no_data' | 'breach' | 'category_issue' | 'grafana_mapping'
+  message: string
+  site_code: string | null
+  cluster_id: string | null
+  potential_uplift_pct: number
+}
+
+export interface FindingsResult {
+  findings: Finding[]
+  last_run: string | null
+}

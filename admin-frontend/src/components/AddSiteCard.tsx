@@ -28,7 +28,7 @@ export function AddSiteCard({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex min-h-[168px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-700 text-neutral-500 hover:border-accent hover:text-accent-strong"
+        className="flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-700 text-neutral-500 hover:border-accent hover:text-accent-strong"
       >
         <Plus size={20} />
         <span className="text-sm font-semibold">Add site</span>

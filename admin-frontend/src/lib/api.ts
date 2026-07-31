@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Site, SiteCategoryTarget, SiteCategoryTargetInput, SiteCreateInput, SiteUpdateInput } from './types'
+import type { FindingsResult, Site, SiteCategoryTarget, SiteCategoryTargetInput, SiteCreateInput, SiteUpdateInput } from './types'
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_ADMIN_API_BASE_URL ?? 'http://localhost:8001',
@@ -31,5 +31,10 @@ export async function fetchSiteCategories(code: string): Promise<SiteCategoryTar
 
 export async function replaceSiteCategories(code: string, items: SiteCategoryTargetInput[]): Promise<SiteCategoryTarget[]> {
   const { data } = await api.put<SiteCategoryTarget[]>(`/api/admin/sites/${code}/categories`, items)
+  return data
+}
+
+export async function fetchFindings(): Promise<FindingsResult> {
+  const { data } = await api.get<FindingsResult>('/api/admin/findings')
   return data
 }

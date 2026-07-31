@@ -6,7 +6,7 @@
 
 ## 目前狀態
 
-功能已完整實作並可部署(見下方[部署](#部署docker-image)):Public API、Admin API、主看板前端、後台管理前端都做完,後端 40 個測試、前後台前端共 11 個元件測試全過。逐項可勾選的實作紀錄在 [plan.md](plan.md)。
+功能已完整實作並可部署(見下方[部署](#部署docker-image)):Public API、Admin API、主看板前端、後台管理前端都做完,後端 43 個測試、前後台前端共 11 個元件測試全過。逐項可勾選的實作紀錄在 [plan.md](plan.md)。
 
 ## 為什麼要做這個
 
@@ -34,6 +34,7 @@ flowchart LR
 - Backend **完全不寫回** Grafana 的 Postgres——我們對那邊只有(也只想要)查詢權限,那是共用的上游基礎設施,同時也被既有的 Grafana dashboard 使用中。
 - 我們自己的 SQLite 是「要追蹤哪些 site、怎麼標示它們」的權威登錄表(城市名稱、國家、經緯度這些 Grafana 資料裡沒有的展示資訊),也存每個 site 各 category 的 SLO target 與是否計入平均。即時 SLO 數字仍然每次即時向 Grafana 查詢(經過 TTL cache),**不會**複製一份存進 SQLite。
 - Public API 和 Admin API 拆成兩個 port,讓沒有登入機制的後台可以在網路層(防火牆/內網限制)做存取控制,不用另外做一套帳號系統(部署成單一 image 時則改用 ingress/network policy 做同樣的事,見[部署](#部署docker-image))。
+- Admin API process 內還跑一個背景迴圈(`checker_service`,見下方 API 表格的 `/api/admin/findings`),每 5 分鐘掃描一次全部 site,把「沒資料、未達標、category 缺失、cluster 缺 Grafana 連結」這類問題整理成一份 Todo list。結果只存在 process 記憶體裡,不寫 SQLite,重啟就重新累積——這是刻意的取捨,換取不用另外設計持久化/已讀狀態的簡單性。
 
 ## 資料來源
 
@@ -143,6 +144,7 @@ backend/
       slo_target_service.py      # per-site per-category SLO 設定讀寫
       site_admin_service.py      # site CRUD
       live_service.py            # 即時 Prometheus SLI(僅本地 cluster)
+      checker_service.py         # 背景掃描邏輯,產生 admin Todo list(見上方架構說明)
     routers/
       public.py                  # /api/public/*
       admin.py                   # /api/admin/*
@@ -165,7 +167,7 @@ frontend/
 admin-frontend/
   src/                           # 獨立 Vite entry,卡片式 CRUD UI
     App.tsx
-    components/SiteCard.tsx / AddSiteCard.tsx
+    components/SiteCard.tsx / AddSiteCard.tsx / FindingsList.tsx
     lib/api.ts / types.ts
 deploy/
   nginx.conf, entrypoint.sh, certs/   # 單一 image 部署用(見下方「部署」)
@@ -199,6 +201,7 @@ Dockerfile                        # repo 根目錄,單一 image 三階段 build
 | DELETE | `/api/admin/sites/{code}` | 刪除 site |
 | GET | `/api/admin/sites/{code}/categories` | 該 site 每個 category 目前的 target_pct 與是否計入平均(沒設定過的 category 回傳預設值 99.0/計入) |
 | PUT | `/api/admin/sites/{code}/categories` | 整批覆寫該 site 的 category 設定(送入的清單即為新的完整設定) |
+| GET | `/api/admin/findings` | 背景 checker 最近一次掃描的結果(`{"findings": [...], "last_run": "..."}`),每筆 finding 含 severity(warn/crit)、分類(no_data/breach/category_issue/grafana_mapping)、訊息、site/cluster 代碼,以及 `potential_uplift_pct`——這個問題修好後,估計 site 的 current SLO 會提升多少個百分點(算不出來的情況,例如缺 Grafana 連結,固定回傳 0)。同一個根因如果在 site/cluster/category 三層都各產生一筆一樣 uplift 的 finding,只保留最具體(category)那一筆,不重複列 |
 
 目前 `/admin` 這組 API **沒有任何登入/驗證機制**,存取控制完全靠部署層的網路隔離(獨立 port,或部署成同一個 image 時靠 ingress/network policy 限制來源)——細節見下方[部署](#部署docker-image)。
 
@@ -227,7 +230,7 @@ npm run dev            # 另一個 Vite port,如 http://localhost:5174
 **測試**
 
 ```bash
-cd backend && uv run pytest        # 40 個測試
+cd backend && uv run pytest        # 43 個測試
 cd frontend && npm test            # Vitest,元件測試(7 個)
 cd admin-frontend && npm test      # Vitest,元件測試(4 個)
 ```
@@ -251,7 +254,7 @@ cd admin-frontend && npm test      # Vitest,元件測試(4 個)
 3. **Public API**——`/api/public/sites`、`/sites/{code}/clusters`、`/categories`、`/trend`、`/clusters/{id}/live`
 4. **Admin API**——site 的 CRUD、per-site per-category SLO 設定讀寫,port 8001
 5. **主看板前端**——世界地圖(`d3-geo` + 真實 topojson,動態投影與版面配置,國家依五大洲上色,滑鼠移到國家或海洋上都會顯示中英文名稱)、KPI 列、Global SLO trend(登錄 site 的 current_pct 平均,忽略沒資料的 site)、site 卡片網格(右側固定張數 + 下方其餘,地圖與選點連線互動,連線起點精準對齊圖上的圓點,卡片下方即時顯示該 site 的概算當地時間——以經度概算 UTC 偏移,非真正的行政時區)、整頁等比例縮放(`ScaleToFit`,視窗變窄時文字與版面同步縮小,不跑版,垂直方向不裁切超出正常版面高度的內容如 hover tooltip)、site detail 頁面每張 cluster 卡片 hover 顯示該 cluster 自己 9 個分類的圓環分數
-6. **後台管理前端**——卡片式 CRUD、每個 site 可展開設定 9 個 category 各自的 target 與是否計入平均、無登入機制、獨立打包
+6. **後台管理前端**——卡片式 CRUD、每個 site 可展開設定 9 個 category 各自的 target 與是否計入平均、無登入機制、獨立打包、Todo list(背景 checker 每 5 分鐘掃描全部 site,列出沒資料/未達標/category 缺失/cluster 缺 Grafana 連結,每筆附「修好後 site SLO 預估提升多少 %」,結果只存記憶體,不持久化)
 7. **打磨**——Grafana 連不上時的優雅降級(回傳最後一次快取資料並標記 `stale`)、響應式與無障礙檢查、測試、主看板與後台標題視覺統一(漸層主標題 + 強調色小標)
 8. **部署**——單一 Docker image(public `/` + admin `/admin` + 兩個 backend,見上方[部署](#部署docker-image))
 

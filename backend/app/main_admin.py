@@ -1,11 +1,37 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import get_settings
 from app.db import init_db
 from app.grafana_client import GrafanaClient
 from app.routers.admin import router as admin_router
+from app.services import checker_service
+
+logger = logging.getLogger(__name__)
+
+
+async def _checker_loop(app: FastAPI) -> None:
+    """Background scan for things an admin would want to know about — no
+    data source, target breaches, missing Grafana links. Findings live only
+    in app.state (see checker_service.run_checks's docstring for why): each
+    pass replaces the previous result, nothing is persisted or dismissible.
+    Runs once immediately on startup, then every SCAN_INTERVAL_SECONDS."""
+    settings = get_settings()
+    while True:
+        try:
+            findings = await checker_service.run_checks(
+                app.state.grafana_client, settings.grafana_postgres_datasource_uid
+            )
+            app.state.checker_findings = findings
+            app.state.checker_last_run = datetime.now(timezone.utc).isoformat()
+        except Exception:
+            logger.exception("checker scan failed")
+        await asyncio.sleep(checker_service.SCAN_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
@@ -15,7 +41,11 @@ async def lifespan(app: FastAPI):
     # exception is reading known category names from Grafana, purely so the
     # SLO target override form can suggest real values instead of blind text entry.
     app.state.grafana_client = GrafanaClient()
+    app.state.checker_findings = []
+    app.state.checker_last_run = None
+    checker_task = asyncio.create_task(_checker_loop(app))
     yield
+    checker_task.cancel()
     await app.state.grafana_client.aclose()
 
 
