@@ -28,6 +28,16 @@ function Overview() {
 
   const sites = sitesQuery.data?.sites ?? []
 
+  // "Global SLO trend" headline number: average of our registered sites'
+  // own current_pct — each of those is already the worst of that site's
+  // clusters (see slo_service.get_sites_overview), not a raw cross-cluster
+  // average, so this stays honest instead of quietly rounding up to 100%.
+  const reportingSites = sites.filter((s) => s.current_pct !== null)
+  const globalCurrentAvg =
+    reportingSites.length > 0
+      ? reportingSites.reduce((sum, s) => sum + s.current_pct!, 0) / reportingSites.length
+      : null
+
   // The card grid's column count (and therefore every card's shared width)
   // is derived from the stage's real rendered width, so it's measured live
   // rather than assumed. A callback ref (not a mount-time effect) is what
@@ -139,7 +149,7 @@ function Overview() {
               </div>
               {trendQuery.isPending && <LoadingRow />}
               {trendQuery.isError && <ErrorRow message="Couldn't load trend data." />}
-              {trendQuery.data && <TrendChart points={trendQuery.data} />}
+              {trendQuery.data && <TrendChart points={trendQuery.data} currentOverride={globalCurrentAvg} />}
             </div>
           </div>
 

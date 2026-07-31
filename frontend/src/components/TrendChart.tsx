@@ -4,7 +4,7 @@ import { buildAreaPath } from '../lib/chart'
 const WIDTH = 1000
 const HEIGHT = 60
 
-export function TrendChart({ points }: { points: TrendPoint[] }) {
+export function TrendChart({ points, currentOverride }: { points: TrendPoint[]; currentOverride?: number | null }) {
   if (points.length === 0) {
     return <p className="px-4 pb-3 text-xs text-neutral-500">No trend data yet.</p>
   }
@@ -14,7 +14,14 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
     WIDTH,
     HEIGHT,
   )
-  const latest = points[points.length - 1].avg_pct
+  // The sparkline's own shape still comes from the trend series (weekly
+  // average across every cluster Grafana knows about — useful for shape,
+  // not a headline number), but the big overlaid figure defaults to that
+  // same series' last point unless the caller has something more specific
+  // — e.g. routes/index.tsx passes the average of our *registered* sites'
+  // own current_pct (itself already the worst-cluster figure, not an
+  // average), so this doesn't read as an inflated global number.
+  const latest = currentOverride ?? points[points.length - 1].avg_pct
 
   return (
     <div className="relative px-4 pb-3">

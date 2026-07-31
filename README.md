@@ -63,8 +63,10 @@ flowchart LR
 | Grafana 查詢快取 | cachetools(`TTLCache`) | 依「查詢字串(SQL/PromQL)」當 cache key,避免前端輪詢時每次都直接打 Grafana;TTL 由 `CACHE_TTL_SECONDS` 設定 |
 | 本地儲存 | SQLite(`aiosqlite`) | 只存 site 登錄表跟 per-site per-category SLO 設定,不存即時指標(那些永遠現查 Grafana) |
 | 前端語言 | TypeScript | |
-| 前端框架 | React 18+ | |
+| 前端框架 | React 19 | |
 | 路由 | TanStack Router(file-based) | 用檔案系統決定路由,型別安全的路由參數(如 `/sites/$code`) |
+| 資料抓取 | TanStack Query | `useQuery`/`useMutation`,自動輪詢(60 秒)+ 快取,兩個前端都用同一套 |
+| 世界地圖 | d3-geo + topojson-client | 真實世界地圖 topojson,動態投影與版面配置(見 `frontend/src/lib/siteProjection.ts`) |
 | 樣式 | Tailwind CSS | |
 | HTTP client | Axios | 前端統一透過一個 Axios instance(`lib/api.ts`)打自己的 backend,不直接打 Grafana |
 | 圖示 | lucide-react | |
@@ -105,6 +107,8 @@ CREATE TABLE site_category_targets (
 初始資料由 `backend/app/seed.py` 灌入,實際內容讀取自 `backend/site_registry.seed.json`(gitignored,機密——見上方[資料來源](#資料來源))。首次設定時複製 `backend/site_registry.seed.example.json` 為 `site_registry.seed.json` 並填入真實 site 清單;也可以不跑 seed script,直接在後台 `/admin` 頁面手動新增 site。
 
 **為什麼「目前 SLO」是「該 site 底下最差 cluster 的分數」,不是分類平均**:早期版本用「有勾選的分類做平均」,理由是避免「整個 site 當週最小值」那種算法在資料不完整時被誤判成還沒跑完而整週略過不採計。但分類平均本身也有一個問題:只要其他分類夠好,單一 cluster 表現不佳會被平均掉,site 卡片跟地圖燈號會顯示「一切正常」,實際上底下某個 cluster 已經在飄零,實際發生過某個 site 六個 cluster 裡有一個明顯偏低,但分類平均後 site 卡片仍顯示接近 100%,問題完全看不出來。現在改成「該 site 所有 cluster 裡,最新一天分數最差的那一個」,site 卡片、地圖燈號、KPI「Meeting target / Breaching SLO」計數、detail 頁面的 Current SLO 全部套用同一套邏輯,不會再被平均掩蓋。哪個 cluster、哪個 category 拖累分數,可以在 site detail 頁面把滑鼠移到該 cluster 卡片上看 tooltip(呼叫 `/api/public/clusters/{cluster_id}/categories`)。趨勢圖(`history`)仍然是分類週平均,只用來看長期走勢,跟「目前」這個數字是兩件事。
+
+同樣的道理也套用在主看板的「Global SLO trend」:這個數字不是直接拿 `/api/public/trend`(跨 Grafana 全庫、含未登錄的 cluster)的最新一點,而是前端另外算「所有有資料的登錄 site,各自 current_pct(已經是各自最差 cluster)的平均」——沒有資料的 site 不計入。原本直接用全庫平均時,即使某些 site 明顯偏低,全庫平均下來還是會四捨五入顯示成「100.0%」,看起來像假的。
 
 ## 環境變數(`backend/.env`)
 
@@ -147,11 +151,22 @@ backend/
   tests/
 frontend/
   src/
-    routes/                      # TanStack Router file-based 路由
+    routes/                      # TanStack Router file-based 路由(index、sites.$code）
     components/
-    lib/api.ts                   # Axios instance
+      WorldMap.tsx                # 世界地圖:國家上色、國家/海洋 hover 名稱、site pin
+      ScaleToFit.tsx               # 整頁等比例縮放
+      ConnectorLine.tsx            # 地圖選點 <-> 卡片的連接線
+      TrendChart.tsx / KpiRow.tsx / SiteMiniCard.tsx / Sparkline.tsx / StatusPill.tsx / AppShell.tsx
+    lib/
+      api.ts                      # Axios instance + 所有 fetch 函式
+      siteProjection.ts            # 地圖投影與卡片版面配置計算
+      continents.ts / countryNamesZh.ts / oceans.ts   # 地圖上色與中英文名稱對照表
+      tier.ts / chart.ts / types.ts
 admin-frontend/
   src/                           # 獨立 Vite entry,卡片式 CRUD UI
+    App.tsx
+    components/SiteCard.tsx / AddSiteCard.tsx
+    lib/api.ts / types.ts
 deploy/
   nginx.conf, entrypoint.sh, certs/   # 單一 image 部署用(見下方「部署」)
 Dockerfile                        # repo 根目錄,單一 image 三階段 build
@@ -168,7 +183,8 @@ Dockerfile                        # repo 根目錄,單一 image 三階段 build
 | GET | `/api/public/sites/{code}/categories` | 該 site 各分類(K8S-Node/ETCD/...)最新一筆的平均與最差 SLO,各自對應該分類在後台設定的 target(目前前端沒有畫面用到,取而代之的是下面單一 cluster 的版本) |
 | GET | `/api/public/clusters/{cluster_id}/categories` | **單一 cluster** 自己最新一天的各分類 SLO,target 沿用該 cluster 所屬 site 的後台設定——site detail 頁面 hover 每張 cluster 卡片跳出的 tooltip 就是這支 API |
 | GET | `/api/public/categories` | 全域各分類(K8S-Node/ETCD/...)的平均與最差 SLO(跨所有 site,固定用全域預設 target 99.0%) |
-| GET | `/api/public/trend` | 全站週趨勢(平均值序列) |
+| GET | `/api/public/trend` | 全站週趨勢(平均值序列,跨 Grafana 已知的所有 cluster,不限登錄過的 site——只用於趨勢圖的線形,不是任何 KPI 的依據) |
+| GET | `/api/public/clusters/count` | Grafana 裡回報進 `slo` 表的 distinct cluster 總數(`{"count": n}`) |
 | GET | `/api/public/clusters/{id}/live` | 即時 SLI(僅本地 cluster 有效;其餘回傳 `{"available": false, "external_url": "..."}`) |
 
 以上每個端點的回應都會帶一個 `X-Stale-Data` header(`true`/`false`)。Grafana 打不通時,backend 會回傳上一次成功查詢的結果並標記 `true`,而不是直接讓請求失敗——前端主看板的「live/syncing」燈號在這個情況下會改顯示「stale」。
@@ -234,7 +250,7 @@ cd admin-frontend && npm test      # Vitest,元件測試(4 個)
 2. **Backend 唯讀資料層**——`GrafanaClient`、TTL cache、整合登錄表與即時 SLO 的 `slo_service`
 3. **Public API**——`/api/public/sites`、`/sites/{code}/clusters`、`/categories`、`/trend`、`/clusters/{id}/live`
 4. **Admin API**——site 的 CRUD、per-site per-category SLO 設定讀寫,port 8001
-5. **主看板前端**——世界地圖(`d3-geo` + 真實 topojson,動態投影與版面配置,國家依五大洲上色,滑鼠移到國家或海洋上都會顯示中英文名稱)、KPI 列、趨勢圖、site 卡片網格(右側固定張數 + 下方其餘,地圖與選點連線互動,連線起點精準對齊圖上的圓點,卡片下方即時顯示該 site 的概算當地時間——以經度概算 UTC 偏移,非真正的行政時區)、整頁等比例縮放(`ScaleToFit`,視窗變窄時文字與版面同步縮小,不跑版,垂直方向不裁切超出正常版面高度的內容如 hover tooltip)、site detail 頁面每張 cluster 卡片 hover 顯示該 cluster 自己 9 個分類的圓環分數
+5. **主看板前端**——世界地圖(`d3-geo` + 真實 topojson,動態投影與版面配置,國家依五大洲上色,滑鼠移到國家或海洋上都會顯示中英文名稱)、KPI 列、Global SLO trend(登錄 site 的 current_pct 平均,忽略沒資料的 site)、site 卡片網格(右側固定張數 + 下方其餘,地圖與選點連線互動,連線起點精準對齊圖上的圓點,卡片下方即時顯示該 site 的概算當地時間——以經度概算 UTC 偏移,非真正的行政時區)、整頁等比例縮放(`ScaleToFit`,視窗變窄時文字與版面同步縮小,不跑版,垂直方向不裁切超出正常版面高度的內容如 hover tooltip)、site detail 頁面每張 cluster 卡片 hover 顯示該 cluster 自己 9 個分類的圓環分數
 6. **後台管理前端**——卡片式 CRUD、每個 site 可展開設定 9 個 category 各自的 target 與是否計入平均、無登入機制、獨立打包
 7. **打磨**——Grafana 連不上時的優雅降級(回傳最後一次快取資料並標記 `stale`)、響應式與無障礙檢查、測試、主看板與後台標題視覺統一(漸層主標題 + 強調色小標)
 8. **部署**——單一 Docker image(public `/` + admin `/admin` + 兩個 backend,見上方[部署](#部署docker-image))
