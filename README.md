@@ -28,6 +28,7 @@ flowchart LR
     Admin -- Axios --> AdminAPI
     PublicAPI -- "httpx + cachetools TTL cache" --> Grafana
     AdminAPI --> SQLite
+    AdminAPI -- "known categories + 背景 checker" --> Grafana
     Grafana --> Postgres
 ```
 
