@@ -241,7 +241,7 @@ cd admin-frontend && npm test      # Vitest,元件測試(4 個)
 一個 image 就能跑完整套系統:public 前端在 `/`、admin 前端在 `/admin`、兩個 FastAPI backend 各自在容器內部的 8000/8001 port,前面統一由一個 nginx 擋在對外的 8080 port,依路徑分流。完整說明(build/push/run 指令、CA 憑證放置方式)見 [deploy/README.md](deploy/README.md),重點摘要:
 
 - `Dockerfile`(repo 根目錄)三階段 build:public 前端(base path `/`)、admin 前端(base path `/admin/`)、Python 依賴,最後組成單一 image。
-- **`backend/.env` 會被直接打進 image**(`Dockerfile` 裡的 `COPY backend/.env ./.env`),執行時不用帶任何環境變數、也不用 k8s Secret,`Settings` 會自動讀到。這是刻意的取捨,換取部署最簡單,代價是 image 本身就含有真實的 Grafana 位址/datasource UID 等機密——只有在 Harbor 存取權本身已經是受控/內部的前提下才適用,細節與風險說明見 [deploy/README.md](deploy/README.md)。`site_registry.seed.json` 則仍然不會打進 image(`.dockerignore` 排除)。
+- **`backend/.env` 和 `backend/site_registry.seed.json` 都會被直接打進 image**(`Dockerfile` 裡對應的 `COPY`),執行時不用帶任何環境變數、不用 k8s Secret,`entrypoint.sh` 每次啟動還會自動跑一次 seed script(idempotent,以 `code` 判斷,見 `app/seed.py`),部署上去就直接有完整的 site 清單,不用再手動一筆一筆新增。這是刻意的取捨,換取部署最簡單、跟本機開發環境長得一模一樣,代價是 image 本身就含有真實的 Grafana 位址/datasource UID、真實 site 清單(代碼、城市、座標、cluster prefix)等機密——只有在 Harbor 存取權本身已經是受控/內部的前提下才適用,細節與風險說明見 [deploy/README.md](deploy/README.md)。因為這個部署方式沒有掛持久化 volume,後台 `/admin` 的編輯(改名、停用、新增)不會在 pod 重啟後保留下來。
 - 如需讓容器信任內部 CA,依 [deploy/certs/README.md](deploy/certs/README.md) 的說明,build 前把憑證放到 `deploy/certs/internal-ca.crt`(gitignored,不進版控)。
 - **`/admin` 目前沒有任何存取控制**(沒有登入頁,也沒有網路隔離)——正式對外部署前,務必在 ingress / network policy 那層限制誰能連到這個路徑,不要直接曝露這個 port。
 - 真正的 registry 位址與專案路徑屬於內部資訊,不寫在這裡或任何進版控的檔案——build/push 指令用你自己環境的實際值執行,格式參考 `deploy/README.md` 裡的 `<your-registry>/<your-project>` 佔位符。

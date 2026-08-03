@@ -22,10 +22,20 @@ at `/admin`, and both backend APIs behind an internal nginx on port 8080.
    `backend/.env.example` and fill it in) before running `docker build` —
    the build fails otherwise.
 2. **Internal CA cert** (optional) — see `deploy/certs/README.md`.
-3. **Site data** — the `sites` table starts empty; add sites through the
-   admin panel at `/admin` after deploying (or run `python -m app.seed`
-   inside the running container if you've mounted a real
-   `site_registry.seed.json`).
+3. **Site data** — `backend/site_registry.seed.json` is likewise copied
+   into the image, and `entrypoint.sh` runs `python -m app.seed` on every
+   container start (idempotent — matched by `code`, see `app/seed.py`),
+   so the `sites` table comes up pre-populated with the real list without
+   any manual step. Same tradeoff and caveat as `.env` above: the image
+   now contains the real site list (codes, cities, coordinates, cluster
+   prefixes) in its layers. Since SQLite isn't on a persistent volume in
+   this deployment, this also means admin-panel edits (renames, added
+   sites, disabled sites) don't survive a pod restart — they'd need a
+   mounted volume for `SQLITE_PATH` to persist, at which point the
+   startup reseed becomes a harmless no-op for anything already there.
+   Make sure the real `backend/site_registry.seed.json` exists locally
+   (copy `backend/site_registry.seed.example.json` and fill it in) before
+   running `docker build`.
 
 ## Access control on /admin
 

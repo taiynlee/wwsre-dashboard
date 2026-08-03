@@ -4,10 +4,14 @@
 .env
 .env.*
 !.env.example
-# backend/.env is the exception — deliberately baked into the image (see
-# the COPY in Dockerfile) instead of injected via k8s Secret at runtime.
+# backend/.env and backend/site_registry.seed.json are the exceptions —
+# deliberately baked into the image (see the COPY lines in Dockerfile)
+# instead of injected/mounted at runtime. Same tradeoff both times: image
+# is self-contained and comes up pre-seeded, but now contains real
+# secrets/site data in its layers — only acceptable where registry access
+# is itself already internal/controlled (see deploy/README.md).
 !backend/.env
-backend/site_registry.seed.json
+!backend/site_registry.seed.json
 
 # local dev artifacts
 **/__pycache__/
