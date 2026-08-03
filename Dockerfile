@@ -68,6 +68,11 @@ COPY --from=backend-deps /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
 COPY backend/app ./app
 COPY backend/pyproject.toml ./
+# Baked in rather than injected via k8s Secret at runtime (deliberate
+# choice — see .dockerignore's matching comment). pydantic-settings reads
+# it automatically via Settings.model_config's env_file=".env", relative
+# to this WORKDIR, which matches entrypoint.sh's `cd /app/backend`.
+COPY backend/.env ./.env
 
 COPY --from=public-frontend-build /src/dist /var/www/public
 COPY --from=admin-frontend-build /src/dist /var/www/admin

@@ -53,7 +53,9 @@ app = FastAPI(title="WWSRE Dashboard — Admin API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5174"],
+    # See main_public.py's identical comment — Vite's auto-fallback port
+    # range, not just the one default port.
+    allow_origin_regex=r"http://localhost:517\d",
     allow_methods=["GET", "POST", "PATCH", "DELETE", "PUT"],
     allow_headers=["*"],
 )

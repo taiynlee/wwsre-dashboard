@@ -1,9 +1,12 @@
 .git/
 
-# secrets / local config — supplied at runtime via k8s Secret, never baked in
+# secrets / local config
 .env
 .env.*
 !.env.example
+# backend/.env is the exception — deliberately baked into the image (see
+# the COPY in Dockerfile) instead of injected via k8s Secret at runtime.
+!backend/.env
 backend/site_registry.seed.json
 
 # local dev artifacts
