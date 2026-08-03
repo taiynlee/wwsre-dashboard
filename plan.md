@@ -63,8 +63,9 @@ Checklist form of the roadmap in [README.md](README.md). Check items off as they
 ## Phase 8 — Deployment
 
 - [x] Single Docker image: public frontend at `/`, admin frontend at `/admin`, both FastAPI backends behind an internal nginx on one exposed port
-- [x] `.dockerignore` keeps `.env` / `site_registry.seed.json` / other local-only confidential files out of the image; runtime config goes through env vars (k8s Secret / `--env-file`) instead
+- [x] `.dockerignore` keeps `.env` / other local-only confidential files out of the image; site data lives in a dedicated Postgres instead of being baked into the image
 - [x] Optional internal CA trust (`deploy/certs/`, gitignored)
+- [x] Registry DB migrated from SQLite to a dedicated Postgres instance (`asyncpg`, connection pool + `search_path` in `app/db.py`) — real local site data (10 sites, 9 category-target overrides) migrated over with zero loss; admin-panel edits now survive pod restarts/redeploys without a mounted volume
 - [x] Built and smoke-tested end to end (`/`, `/admin`, both `/api/*/health`) against a real registry push
 - [ ] `/admin` access control at the ingress/network-policy layer — explicitly deferred for the current testing phase, not yet decided
 

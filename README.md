@@ -20,20 +20,20 @@ flowchart LR
     Admin["管理後台<br/>React, 獨立 Vite entry,無帳號登入"]
     PublicAPI["FastAPI — Public API<br/>port 8000"]
     AdminAPI["FastAPI — Admin API<br/>port 8001"]
-    SQLite[("SQLite<br/>site 登錄表 +<br/>per-site per-category SLO 設定")]
+    RegistryPG[("Postgres(專用,dashboard schema)<br/>site 登錄表 +<br/>per-site per-category SLO 設定")]
     Grafana["Grafana /api/ds/query<br/>匿名存取,唯讀"]
-    Postgres[("Postgres<br/>slo, slo_target,<br/>grafana_mapping, geo")]
+    Postgres[("Grafana Postgres<br/>slo, slo_target,<br/>grafana_mapping, geo")]
 
     Public -- Axios --> PublicAPI
     Admin -- Axios --> AdminAPI
     PublicAPI -- "httpx + cachetools TTL cache" --> Grafana
-    AdminAPI --> SQLite
+    AdminAPI --> RegistryPG
     AdminAPI -- "known categories + 背景 checker" --> Grafana
     Grafana --> Postgres
 ```
 
 - Backend **完全不寫回** Grafana 的 Postgres——我們對那邊只有(也只想要)查詢權限,那是共用的上游基礎設施,同時也被既有的 Grafana dashboard 使用中。
-- 我們自己的 SQLite 是「要追蹤哪些 site、怎麼標示它們」的權威登錄表(城市名稱、國家、經緯度這些 Grafana 資料裡沒有的展示資訊),也存每個 site 各 category 的 SLO target 與是否計入平均。即時 SLO 數字仍然每次即時向 Grafana 查詢(經過 TTL cache),**不會**複製一份存進 SQLite。
+- 我們自己的登錄資料庫是**另一個獨立、專用的 Postgres 實例**(跟上面 Grafana 用的那個完全無關,連線資訊各自獨立——見下方[環境變數](#環境變數backendenv)的 `PG_*`),是「要追蹤哪些 site、怎麼標示它們」的權威登錄表(城市名稱、國家、經緯度這些 Grafana 資料裡沒有的展示資訊),也存每個 site 各 category 的 SLO target 與是否計入平均。即時 SLO 數字仍然每次即時向 Grafana 查詢(經過 TTL cache),**不會**複製一份存進這個登錄資料庫。
 - Public API 和 Admin API 拆成兩個 port,讓沒有登入機制的後台可以在網路層(防火牆/內網限制)做存取控制,不用另外做一套帳號系統(部署成單一 image 時則改用 ingress/network policy 做同樣的事,見[部署](#部署docker-image))。
 - Admin API process 內還跑一個背景迴圈(`checker_service`,見下方 API 表格的 `/api/admin/findings`),每 5 分鐘掃描一次全部 site,把「沒資料、未達標、category 缺失、cluster 缺 Grafana 連結」這類問題整理成一份 Todo list。結果只存在 process 記憶體裡,不寫 SQLite,重啟就重新累積——這是刻意的取捨,換取不用另外設計持久化/已讀狀態的簡單性。
 
@@ -48,7 +48,7 @@ flowchart LR
 | `slo` | 每個 `cluster_id` × `category`(如 `K8S-Node`、`K8S-ETCD`、`K8S-API SERVER` 等)的每日/每週 `min_slo`——真正的營運歷史數據 |
 | `slo_target` | 各分類的 SLO 目標值(目前全域統一 99.0%) |
 | `grafana_mapping` | `cluster_id` → 該 cluster 自己的 Grafana 網址(用來做「查看即時明細」的外部連結) |
-| `geo` | site 代碼、經緯度,以及一個 `SLO` 快照欄位——**這個 `SLO` 欄位實測跟 `slo` 表算出來的最新值對不上、疑似沒在維護,不要拿它當現況依據,只能當經緯度查詢用(或乾脆改用我們自己 SQLite 的登錄表)。** |
+| `geo` | site 代碼、經緯度,以及一個 `SLO` 快照欄位——**這個 `SLO` 欄位實測跟 `slo` 表算出來的最新值對不上、疑似沒在維護,不要拿它當現況依據,只能當經緯度查詢用(或乾脆改用我們自己 Postgres 的登錄表)。** |
 
 即時 Prometheus SLI(CPU、ETCD 延遲、API server 錯誤率等各元件的即時 gauge)只有這座 Grafana本地那一個 cluster 查得到——其餘 cluster 各自有獨立的 Grafana/Prometheus(透過 `grafana_mapping.url` 連結),backend 不會直接查詢它們。
 
@@ -63,7 +63,7 @@ flowchart LR
 | Backend 套件管理 | uv | `uv init` / `uv add` / `uv run`,鎖檔用 `uv.lock` |
 | 設定與驗證 | pydantic-settings | 從 `.env` 讀 `Settings`,啟動時就做型別驗證,設定值錯誤直接啟動失敗而不是執行到一半才炸 |
 | Grafana 查詢快取 | cachetools(`TTLCache`) | 依「查詢字串(SQL/PromQL)」當 cache key,避免前端輪詢時每次都直接打 Grafana;TTL 由 `CACHE_TTL_SECONDS` 設定 |
-| 本地儲存 | SQLite(`aiosqlite`) | 只存 site 登錄表跟 per-site per-category SLO 設定,不存即時指標(那些永遠現查 Grafana) |
+| 登錄資料庫 | Postgres(`asyncpg`) | 專用的獨立 Postgres 實例(跟 Grafana 用的那個無關),連線池由 `app/db.py` 管理,`search_path` 指到 `PG_SCHEMA` 設定的 schema;只存 site 登錄表跟 per-site per-category SLO 設定,不存即時指標(那些永遠現查 Grafana) |
 | 前端語言 | TypeScript | |
 | 前端框架 | React 19 | |
 | 路由 | TanStack Router(file-based) | 用檔案系統決定路由,型別安全的路由參數(如 `/sites/$code`) |
@@ -75,7 +75,9 @@ flowchart LR
 | 打包工具 | Vite | 前台、後台各自獨立的 Vite 專案(兩個 `package.json`) |
 | 測試 | pytest + pytest-asyncio(後端)| service 層邏輯用 mock 過的 `GrafanaClient` 測,不必每次測試都真的打 Grafana |
 
-## 資料模型(SQLite)
+## 資料模型(Postgres)
+
+登錄資料庫是一個獨立、專用的 Postgres 實例(連線資訊 `PG_HOST`/`PG_PORT`/`PG_USER`/`PG_PASSWORD`/`PG_DATABASE`/`PG_SCHEMA`,見下方[環境變數](#環境變數backendenv)),跟 Grafana 自己用的 Postgres 完全無關。`app/db.py`'s `init_db()` 啟動時自動 `CREATE SCHEMA IF NOT EXISTS` + 建表(idempotent),連線池的每個連線都把 `search_path` 設成 `PG_SCHEMA`,所以下面的 SQL 都不用寫 schema 前綴:
 
 ```sql
 -- site 登錄表:我們自己維護的「要追蹤哪些 site」清單
@@ -83,30 +85,30 @@ CREATE TABLE sites (
     code            TEXT PRIMARY KEY,   -- 例如 'ABC',對應 Grafana cluster_id 前綴
     display_name    TEXT NOT NULL,      -- 城市顯示名稱,如 'Example City'
     country         TEXT NOT NULL,
-    latitude        REAL NOT NULL,
-    longitude       REAL NOT NULL,
+    latitude        DOUBLE PRECISION NOT NULL,
+    longitude       DOUBLE PRECISION NOT NULL,
     cluster_prefix  TEXT NOT NULL,      -- 對應 Grafana slo.cluster_id 的 LIKE 前綴,如 'abc'
-    enabled         INTEGER NOT NULL DEFAULT 1,  -- 0/1,停用後不在主看板顯示
-    created_at      TEXT NOT NULL,
-    updated_at      TEXT NOT NULL
+    enabled         BOOLEAN NOT NULL DEFAULT true,  -- 停用後不在主看板顯示
+    created_at      TIMESTAMPTZ NOT NULL,
+    updated_at      TIMESTAMPTZ NOT NULL
 );
 
 -- 每個 site、每個 category(K8S-Node/ETCD/ArgoCD/...)各自的 SLO 設定。
--- 一個 site 「現在的 SLO」= 該 site 底下所有 included=1 的 category 的
+-- 一個 site 「現在的 SLO」= 該 site 底下所有 included=true 的 category 的
 -- 即時數值平均;「target」= 同一組 included 分類的 target_pct 平均——
 -- 兩者用同一組分類算,才有意義互相比較。
--- 沒有出現在這張表的 (site, category) 組合,視同 target_pct=99.0、included=1。
+-- 沒有出現在這張表的 (site, category) 組合,視同 target_pct=99.0、included=true。
 CREATE TABLE site_category_targets (
     site_code   TEXT NOT NULL REFERENCES sites(code),
     category    TEXT NOT NULL,
-    target_pct  REAL NOT NULL DEFAULT 99.0,
-    included    INTEGER NOT NULL DEFAULT 1,  -- 0/1,是否計入該 site 的 SLO 平均
-    updated_at  TEXT NOT NULL,
+    target_pct  DOUBLE PRECISION NOT NULL DEFAULT 99.0,
+    included    BOOLEAN NOT NULL DEFAULT true,  -- 是否計入該 site 的 SLO 平均
+    updated_at  TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (site_code, category)
 );
 ```
 
-初始資料由 `backend/app/seed.py` 灌入,實際內容讀取自 `backend/site_registry.seed.json`(gitignored,機密——見上方[資料來源](#資料來源))。首次設定時複製 `backend/site_registry.seed.example.json` 為 `site_registry.seed.json` 並填入真實 site 清單;也可以不跑 seed script,直接在後台 `/admin` 頁面手動新增 site。
+`init_db()` 只建 schema/表,**不會**灌入任何資料列。首次對一個全新的 Postgres 設定時,執行一次 `uv run python -m app.seed`(在 `backend/` 目錄下)灌入初始清單,實際內容讀取自 `backend/site_registry.seed.json`(gitignored,機密——見上方[資料來源](#資料來源));複製 `backend/site_registry.seed.example.json` 為 `site_registry.seed.json` 並填入真實 site 清單。這個 script 是 idempotent(以 `code`/`(site_code, category)` 判斷,`ON CONFLICT DO NOTHING`),重複執行不會覆蓋既有資料,之後也可以完全不跑,直接在後台 `/admin` 頁面手動新增 site——因為資料存在 Postgres,不是容器本地檔案,admin 的編輯會一直留著,不會因為 pod 重啟或重新部署而消失。
 
 **為什麼「目前 SLO」是「該 site 底下最差 cluster 的分數」,不是分類平均**:早期版本用「有勾選的分類做平均」,理由是避免「整個 site 當週最小值」那種算法在資料不完整時被誤判成還沒跑完而整週略過不採計。但分類平均本身也有一個問題:只要其他分類夠好,單一 cluster 表現不佳會被平均掉,site 卡片跟地圖燈號會顯示「一切正常」,實際上底下某個 cluster 已經在飄零,實際發生過某個 site 六個 cluster 裡有一個明顯偏低,但分類平均後 site 卡片仍顯示接近 100%,問題完全看不出來。現在改成「該 site 所有 cluster 裡,最新一天分數最差的那一個」,site 卡片、地圖燈號、KPI「Meeting target / Breaching SLO」計數、detail 頁面的 Current SLO 全部套用同一套邏輯,不會再被平均掩蓋。哪個 cluster、哪個 category 拖累分數,可以在 site detail 頁面把滑鼠移到該 cluster 卡片上看 tooltip(呼叫 `/api/public/clusters/{cluster_id}/categories`)。趨勢圖(`history`)仍然是分類週平均,只用來看長期走勢,跟「目前」這個數字是兩件事。
 
@@ -123,7 +125,12 @@ CREATE TABLE site_category_targets (
 | `GRAFANA_PROMETHEUS_DATASOURCE_UID` | 本地 cluster 的 Prometheus datasource uid(機密,只在 `.env`) | `<prometheus-datasource-uid>` |
 | `LOCAL_CLUSTER_ID` | 這座 Grafana 能查到即時 SLI 的那個 cluster_id(機密,只在 `.env`) | `<local-cluster-id>` |
 | `CACHE_TTL_SECONDS` | Grafana 查詢結果快取秒數 | `90` |
-| `SQLITE_PATH` | SQLite 檔案路徑 | `./data/wwsre.db` |
+| `PG_HOST` | 登錄資料庫 Postgres 主機(機密,只在 `.env`,跟 Grafana 用的 Postgres 是不同實例) | `<dedicated-postgres-host>` |
+| `PG_PORT` | 登錄資料庫 Postgres port | `5432` |
+| `PG_USER` | 登錄資料庫帳號(機密,只在 `.env`) | `<pg-user>` |
+| `PG_PASSWORD` | 登錄資料庫密碼(機密,只在 `.env`) | `<pg-password>` |
+| `PG_DATABASE` | 登錄資料庫的 database 名稱 | `<pg-database>` |
+| `PG_SCHEMA` | 登錄資料庫的 schema 名稱(連線池 `search_path` 會指向這裡) | `dashboard` |
 | `PUBLIC_API_PORT` | Public API 監聽 port | `8000` |
 | `ADMIN_API_PORT` | Admin API 監聽 port | `8001` |
 
@@ -135,7 +142,7 @@ backend/
     config.py                    # pydantic-settings
     cache.py                     # cachetools TTLCache 包裝 + stale-fallback
     grafana_client.py            # httpx client,包 /api/ds/query
-    db.py                        # SQLite 連線與 schema 初始化
+    db.py                        # Postgres 連線池與 schema 初始化
     seed.py                      # site 初始資料灌入腳本
     sql_safety.py                # 拼進 Grafana rawSql 前的識別字元驗證(防注入)
     dependencies.py               # FastAPI Depends(GrafanaClient/Settings)
@@ -241,7 +248,8 @@ cd admin-frontend && npm test      # Vitest,元件測試(4 個)
 一個 image 就能跑完整套系統:public 前端在 `/`、admin 前端在 `/admin`、兩個 FastAPI backend 各自在容器內部的 8000/8001 port,前面統一由一個 nginx 擋在對外的 8080 port,依路徑分流。完整說明(build/push/run 指令、CA 憑證放置方式)見 [deploy/README.md](deploy/README.md),重點摘要:
 
 - `Dockerfile`(repo 根目錄)三階段 build:public 前端(base path `/`)、admin 前端(base path `/admin/`)、Python 依賴,最後組成單一 image。
-- **`backend/.env` 和 `backend/site_registry.seed.json` 都會被直接打進 image**(`Dockerfile` 裡對應的 `COPY`),執行時不用帶任何環境變數、不用 k8s Secret,`entrypoint.sh` 每次啟動還會自動跑一次 seed script(idempotent,以 `code` 判斷,見 `app/seed.py`),部署上去就直接有完整的 site 清單,不用再手動一筆一筆新增。這是刻意的取捨,換取部署最簡單、跟本機開發環境長得一模一樣,代價是 image 本身就含有真實的 Grafana 位址/datasource UID、真實 site 清單(代碼、城市、座標、cluster prefix)等機密——只有在 Harbor 存取權本身已經是受控/內部的前提下才適用,細節與風險說明見 [deploy/README.md](deploy/README.md)。因為這個部署方式沒有掛持久化 volume,後台 `/admin` 的編輯(改名、停用、新增)不會在 pod 重啟後保留下來。
+- **`backend/.env` 會被直接打進 image**(`Dockerfile` 裡的 `COPY backend/.env ./.env`),執行時不用帶任何環境變數、不用 k8s Secret。這是刻意的取捨,換取部署最簡單、跟本機開發環境長得一模一樣,代價是 image 本身就含有真實的 Grafana 位址/datasource UID、以及登錄資料庫的 Postgres 連線密碼等機密——只有在 Harbor 存取權本身已經是受控/內部的前提下才適用,細節與風險說明見 [deploy/README.md](deploy/README.md)。
+- **Site 清單存在專用的 Postgres**,不在 image 裡——啟動時 `init_db()` 只確保 schema/表存在(idempotent),不會灌資料。所以後台 `/admin` 的編輯(改名、停用、新增)會直接留在 Postgres 裡,pod 重啟、重新部署、換 image 版本都不會遺失,也不需要掛任何持久化 volume。
 - 如需讓容器信任內部 CA,依 [deploy/certs/README.md](deploy/certs/README.md) 的說明,build 前把憑證放到 `deploy/certs/internal-ca.crt`(gitignored,不進版控)。
 - **`/admin` 目前沒有任何存取控制**(沒有登入頁,也沒有網路隔離)——正式對外部署前,務必在 ingress / network policy 那層限制誰能連到這個路徑,不要直接曝露這個 port。
 - 真正的 registry 位址與專案路徑屬於內部資訊,不寫在這裡或任何進版控的檔案——build/push 指令用你自己環境的實際值執行,格式參考 `deploy/README.md` 裡的 `<your-registry>/<your-project>` 佔位符。
@@ -250,7 +258,7 @@ cd admin-frontend && npm test      # Vitest,元件測試(4 個)
 
 逐項可勾選清單見 [plan.md](plan.md);以下是各階段的重點:
 
-1. **地基**——repo 骨架(uv + Vite)、設定檔、SQLite schema 與 site 清單的 seed script
+1. **地基**——repo 骨架(uv + Vite)、設定檔、Postgres schema 與 site 清單的 seed script
 2. **Backend 唯讀資料層**——`GrafanaClient`、TTL cache、整合登錄表與即時 SLO 的 `slo_service`
 3. **Public API**——`/api/public/sites`、`/sites/{code}/clusters`、`/categories`、`/trend`、`/clusters/{id}/live`
 4. **Admin API**——site 的 CRUD、per-site per-category SLO 設定讀寫,port 8001

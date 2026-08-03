@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from app.cache import clear_cache
 from app.dependencies import get_grafana_client
-from app.db import init_db, utcnow_iso
+from app.db import init_db, utcnow
 from app.db import get_db as get_db_ctx
 
 
@@ -29,16 +29,22 @@ class FlakyGrafanaClient:
 
 
 async def _insert_site() -> None:
-    now = utcnow_iso()
-    async with get_db_ctx() as db:
-        await db.execute(
+    now = utcnow()
+    async with get_db_ctx() as conn:
+        await conn.execute(
             """
             INSERT INTO sites (code, display_name, country, latitude, longitude, cluster_prefix, enabled, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+            VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8)
             """,
-            ("AAA", "Test City", "Test Country", 1.0, 2.0, "aaa", now, now),
+            "AAA",
+            "Test City",
+            "Test Country",
+            1.0,
+            2.0,
+            "aaa",
+            now,
+            now,
         )
-        await db.commit()
 
 
 async def test_sites_endpoint_serves_stale_data_when_grafana_goes_down():

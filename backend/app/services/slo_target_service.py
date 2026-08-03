@@ -1,5 +1,5 @@
 from app.cache import CachedResult
-from app.db import get_db, utcnow_iso
+from app.db import get_db, utcnow
 from app.grafana_client import GrafanaClient
 from app.schemas import SiteCategoryTargetIn
 from app.services import slo_service
@@ -8,12 +8,11 @@ DEFAULT_TARGET_PCT = slo_service.TARGET_DEFAULT_PCT
 
 
 async def _fetch_site_category_rows(site_code: str) -> dict[str, dict]:
-    async with get_db() as db:
-        cursor = await db.execute(
-            "SELECT category, target_pct, included FROM site_category_targets WHERE site_code = ?",
-            (site_code,),
+    async with get_db() as conn:
+        rows = await conn.fetch(
+            "SELECT category, target_pct, included FROM site_category_targets WHERE site_code = $1",
+            site_code,
         )
-        rows = await cursor.fetchall()
         return {row["category"]: dict(row) for row in rows}
 
 
@@ -29,7 +28,7 @@ async def get_site_category_settings(grafana: GrafanaClient, datasource_uid: str
             "site_code": site_code,
             "category": category,
             "target_pct": stored[category]["target_pct"] if category in stored else DEFAULT_TARGET_PCT,
-            "included": bool(stored[category]["included"]) if category in stored else True,
+            "included": stored[category]["included"] if category in stored else True,
         }
         for category in known.value
     ]
@@ -38,18 +37,22 @@ async def get_site_category_settings(grafana: GrafanaClient, datasource_uid: str
 
 async def replace_site_category_settings(site_code: str, items: list[SiteCategoryTargetIn]) -> list[dict]:
     """PUT semantics: the given list becomes the entire per-category setting set for this site."""
-    now = utcnow_iso()
-    async with get_db() as db:
-        await db.execute("DELETE FROM site_category_targets WHERE site_code = ?", (site_code,))
-        for item in items:
-            await db.execute(
-                """
-                INSERT INTO site_category_targets (site_code, category, target_pct, included, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (site_code, item.category, item.target_pct, 1 if item.included else 0, now),
-            )
-        await db.commit()
+    now = utcnow()
+    async with get_db() as conn:
+        async with conn.transaction():
+            await conn.execute("DELETE FROM site_category_targets WHERE site_code = $1", site_code)
+            for item in items:
+                await conn.execute(
+                    """
+                    INSERT INTO site_category_targets (site_code, category, target_pct, included, updated_at)
+                    VALUES ($1, $2, $3, $4, $5)
+                    """,
+                    site_code,
+                    item.category,
+                    item.target_pct,
+                    item.included,
+                    now,
+                )
 
     return [
         {"site_code": site_code, "category": i.category, "target_pct": i.target_pct, "included": i.included}
@@ -61,9 +64,8 @@ async def fetch_all_site_category_settings() -> dict[str, dict[str, dict]]:
     """Every configured (site_code, category) row, keyed by site_code then
     category — used by slo_service to resolve every site's overview in one
     fresh read instead of one query per site."""
-    async with get_db() as db:
-        cursor = await db.execute("SELECT site_code, category, target_pct, included FROM site_category_targets")
-        rows = await cursor.fetchall()
+    async with get_db() as conn:
+        rows = await conn.fetch("SELECT site_code, category, target_pct, included FROM site_category_targets")
 
     by_site: dict[str, dict[str, dict]] = {}
     for row in rows:

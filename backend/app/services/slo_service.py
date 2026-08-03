@@ -66,23 +66,21 @@ def _tier_for(value: float | None, target: float) -> str:
 
 
 async def _fetch_site_rows() -> list[dict]:
-    async with get_db() as db:
-        cursor = await db.execute(
+    async with get_db() as conn:
+        rows = await conn.fetch(
             "SELECT code, display_name, country, latitude, longitude, cluster_prefix "
-            "FROM sites WHERE enabled = 1 ORDER BY code"
+            "FROM sites WHERE enabled = true ORDER BY code"
         )
-        rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
 
 async def _fetch_site_by_code(code: str) -> dict:
-    async with get_db() as db:
-        cursor = await db.execute(
+    async with get_db() as conn:
+        row = await conn.fetchrow(
             "SELECT code, display_name, country, latitude, longitude, cluster_prefix "
-            "FROM sites WHERE code = ? AND enabled = 1",
-            (code,),
+            "FROM sites WHERE code = $1 AND enabled = true",
+            code,
         )
-        row = await cursor.fetchone()
         if row is None:
             raise SiteNotFoundError(code)
         return dict(row)
@@ -106,9 +104,8 @@ async def _fetch_all_category_settings() -> dict[str, dict[str, dict]]:
     category. Read fresh (uncached) — same reasoning as the site registry:
     this is admin-edited local data, and changes should show up on the next
     request rather than waiting out a Grafana result's TTL."""
-    async with get_db() as db:
-        cursor = await db.execute("SELECT site_code, category, target_pct, included FROM site_category_targets")
-        rows = await cursor.fetchall()
+    async with get_db() as conn:
+        rows = await conn.fetch("SELECT site_code, category, target_pct, included FROM site_category_targets")
 
     by_site: dict[str, dict[str, dict]] = {}
     for row in rows:

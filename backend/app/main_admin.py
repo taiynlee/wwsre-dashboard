@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.db import init_db
+from app.db import close_db, init_db
 from app.grafana_client import GrafanaClient
 from app.routers.admin import router as admin_router
 from app.services import checker_service
@@ -36,10 +36,16 @@ async def _checker_loop(app: FastAPI) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # close_db() before init_db() is a no-op in normal single-process
+    # startup — it matters for tests, where TestClient runs this lifespan
+    # in its own thread/event loop, and an asyncpg pool from a different
+    # loop can't be reused there.
+    await close_db()
     await init_db()
-    # Admin is otherwise SQLite-only (CRUD on the local registry) — the one
-    # exception is reading known category names from Grafana, purely so the
-    # SLO target override form can suggest real values instead of blind text entry.
+    # Admin otherwise only touches its own Postgres registry (site CRUD,
+    # category-target edits) — the one exception is reading known category
+    # names from Grafana, purely so the SLO target override form can
+    # suggest real values instead of blind text entry.
     app.state.grafana_client = GrafanaClient()
     app.state.checker_findings = []
     app.state.checker_last_run = None
@@ -47,6 +53,7 @@ async def lifespan(app: FastAPI):
     yield
     checker_task.cancel()
     await app.state.grafana_client.aclose()
+    await close_db()
 
 
 app = FastAPI(title="WWSRE Dashboard — Admin API", lifespan=lifespan)

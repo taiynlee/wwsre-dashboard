@@ -1,4 +1,4 @@
-from app.db import get_db, utcnow_iso
+from app.db import get_db, utcnow
 
 
 class FakeGrafanaClient:
@@ -33,13 +33,19 @@ class FakeGrafanaClient:
 
 
 async def insert_site(code: str, prefix: str) -> None:
-    now = utcnow_iso()
-    async with get_db() as db:
-        await db.execute(
+    now = utcnow()
+    async with get_db() as conn:
+        await conn.execute(
             """
             INSERT INTO sites (code, display_name, country, latitude, longitude, cluster_prefix, enabled, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+            VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8)
             """,
-            (code, f"{code} City", f"{code} Country", 1.0, 2.0, prefix, now, now),
+            code,
+            f"{code} City",
+            f"{code} Country",
+            1.0,
+            2.0,
+            prefix,
+            now,
+            now,
         )
-        await db.commit()

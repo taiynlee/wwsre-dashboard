@@ -12,7 +12,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from app.db import get_db, init_db, utcnow_iso
+from app.db import get_db, init_db, utcnow
 
 SEED_FILE = Path(__file__).resolve().parent.parent / "site_registry.seed.json"
 EXAMPLE_FILE = SEED_FILE.with_name("site_registry.seed.example.json")
@@ -29,16 +29,16 @@ def load_sites() -> list[dict]:
 
 async def seed() -> None:
     await init_db()
-    now = utcnow_iso()
-    async with get_db() as db:
-        for site in load_sites():
-            await db.execute(
-                """
-                INSERT INTO sites (code, display_name, country, latitude, longitude, cluster_prefix, enabled, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-                ON CONFLICT(code) DO NOTHING
-                """,
-                (
+    now = utcnow()
+    async with get_db() as conn:
+        async with conn.transaction():
+            for site in load_sites():
+                await conn.execute(
+                    """
+                    INSERT INTO sites (code, display_name, country, latitude, longitude, cluster_prefix, enabled, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8)
+                    ON CONFLICT (code) DO NOTHING
+                    """,
                     site["code"],
                     site["display_name"],
                     site["country"],
@@ -47,9 +47,7 @@ async def seed() -> None:
                     site["cluster_prefix"],
                     now,
                     now,
-                ),
-            )
-        await db.commit()
+                )
 
 
 if __name__ == "__main__":

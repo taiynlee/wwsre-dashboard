@@ -71,12 +71,11 @@ COPY backend/pyproject.toml ./
 # Baked in rather than injected/mounted at runtime (deliberate choice —
 # see .dockerignore's matching comment). pydantic-settings reads .env
 # automatically via Settings.model_config's env_file=".env", relative to
-# this WORKDIR, which matches entrypoint.sh's `cd /app/backend`.
-# site_registry.seed.json is read by entrypoint.sh's seed step on every
-# container start (idempotent — see app/seed.py) so a fresh, unmounted
-# SQLite file still comes up pre-populated.
+# this WORKDIR, which matches entrypoint.sh's `cd /app/backend`. Carries
+# both the Grafana connection info and the app's own Postgres registry DB
+# credentials (PG_*) — the site list itself now lives in that Postgres
+# instance, not in this image (see README's 資料模型 section).
 COPY backend/.env ./.env
-COPY backend/site_registry.seed.json ./site_registry.seed.json
 
 COPY --from=public-frontend-build /src/dist /var/www/public
 COPY --from=admin-frontend-build /src/dist /var/www/admin

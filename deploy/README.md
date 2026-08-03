@@ -11,31 +11,29 @@ at `/admin`, and both backend APIs behind an internal nginx on port 8080.
    no `--env-file`. This is a deliberate tradeoff, not an oversight: it
    means the image is self-contained and dead simple to run, but the image
    **now contains real secrets** (`GRAFANA_BASE_URL`,
-   `GRAFANA_POSTGRES_DATASOURCE_UID`, etc. — see `backend/app/config.py`
-   for the full list) in its layers. Anyone who can `docker pull` this
-   image from Harbor can read them back out (`docker save` + inspect the
-   layer, or just `docker run --entrypoint sh ... cat backend/.env`). Only
-   acceptable because Harbor access here is itself already
-   internal/controlled — if that stops being true, switch back to
-   `envFrom: secretRef` + removing the `COPY backend/.env` line instead.
-   Make sure the real `backend/.env` exists locally (copy
-   `backend/.env.example` and fill it in) before running `docker build` —
-   the build fails otherwise.
+   `GRAFANA_POSTGRES_DATASOURCE_UID`, the app's own `PG_*` registry-database
+   credentials, etc. — see `backend/app/config.py` for the full list) in
+   its layers. Anyone who can `docker pull` this image from Harbor can read
+   them back out (`docker save` + inspect the layer, or just
+   `docker run --entrypoint sh ... cat backend/.env`). Only acceptable
+   because Harbor access here is itself already internal/controlled — if
+   that stops being true, switch back to `envFrom: secretRef` + removing
+   the `COPY backend/.env` line instead. Make sure the real `backend/.env`
+   exists locally (copy `backend/.env.example` and fill it in) before
+   running `docker build` — the build fails otherwise.
 2. **Internal CA cert** (optional) — see `deploy/certs/README.md`.
-3. **Site data** — `backend/site_registry.seed.json` is likewise copied
-   into the image, and `entrypoint.sh` runs `python -m app.seed` on every
-   container start (idempotent — matched by `code`, see `app/seed.py`),
-   so the `sites` table comes up pre-populated with the real list without
-   any manual step. Same tradeoff and caveat as `.env` above: the image
-   now contains the real site list (codes, cities, coordinates, cluster
-   prefixes) in its layers. Since SQLite isn't on a persistent volume in
-   this deployment, this also means admin-panel edits (renames, added
-   sites, disabled sites) don't survive a pod restart — they'd need a
-   mounted volume for `SQLITE_PATH` to persist, at which point the
-   startup reseed becomes a harmless no-op for anything already there.
-   Make sure the real `backend/site_registry.seed.json` exists locally
-   (copy `backend/site_registry.seed.example.json` and fill it in) before
-   running `docker build`.
+3. **Site data** — the `sites` / `site_category_targets` tables live in a
+   dedicated Postgres instance (connection info: `PG_HOST`/`PG_PORT`/
+   `PG_USER`/`PG_PASSWORD`/`PG_DATABASE`/`PG_SCHEMA` in `backend/.env`),
+   not in the image. `init_db()` creates the schema/tables on startup if
+   missing (idempotent), but does **not** seed any rows — a fresh Postgres
+   needs `uv run python -m app.seed` run once by hand (reads
+   `backend/site_registry.seed.json`, gitignored, see
+   `site_registry.seed.example.json` for the shape) to populate the initial
+   site list. Because the data lives in Postgres rather than in the
+   container, there's no volume to mount and no reseed-on-start step:
+   admin-panel edits (renames, added sites, disabled sites) persist across
+   pod restarts and redeploys on their own.
 
 ## Access control on /admin
 
