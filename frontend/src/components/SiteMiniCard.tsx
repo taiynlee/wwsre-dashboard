@@ -32,8 +32,8 @@ export function SiteMiniCard({ site, selected, onSelect }: { site: SiteStatus; s
 
   return (
     <div
-      className={`flex min-h-0 cursor-pointer flex-col justify-between gap-1 rounded-lg border bg-neutral-950/40 p-2 transition ${
-        selected ? 'border-accent' : 'border-neutral-800 hover:border-neutral-700'
+      className={`flex min-h-0 cursor-pointer flex-col justify-between gap-1 rounded-lg border bg-canvas/40 p-2 transition ${
+        selected ? 'border-accent' : 'border-line hover:border-line-strong'
       } ${site.tier === 'unknown' ? 'opacity-70' : ''}`}
       onClick={onSelect}
       role="button"
@@ -53,19 +53,19 @@ export function SiteMiniCard({ site, selected, onSelect }: { site: SiteStatus; s
         <StatusPill tier={site.tier} compact />
       </div>
 
-      <div className="truncate text-[9.5px] leading-tight text-neutral-400">
+      <div className="truncate text-[9.5px] leading-tight text-ink-soft">
         {site.country} · <span className="text-warn font-semibold">{site.cluster_count}</span> cluster{site.cluster_count === 1 ? '' : 's'}
       </div>
 
       <div className="flex items-baseline justify-between">
         <span className="font-mono text-[16px] font-bold tracking-tight tabular-nums">{valueText}</span>
-        <span className="font-mono text-[8.5px] text-neutral-500">target {site.target_pct.toFixed(1)}%</span>
+        <span className="font-mono text-[8.5px] text-ink-muted">target {site.target_pct.toFixed(1)}%</span>
       </div>
 
       <Sparkline series={site.history} tier={site.tier} height={18} />
 
-      <div className="flex items-baseline justify-between border-t border-dashed border-neutral-800 pt-1">
-        <span className="font-mono text-[7.5px] whitespace-nowrap text-neutral-500">
+      <div className="flex items-baseline justify-between border-t border-dashed border-line pt-1">
+        <span className="font-mono text-[7.5px] whitespace-nowrap text-ink-muted">
           local time {formatLocalDateTime(now, approxUtcOffset(site.longitude))}
         </span>
         <Link

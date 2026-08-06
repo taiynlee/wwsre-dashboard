@@ -5,7 +5,7 @@ import { TIER_FILL } from '../lib/tier'
 export function Sparkline({ series, tier, width = 210, height = 34 }: { series: number[]; tier: Tier; width?: number; height?: number }) {
   if (series.length === 0) {
     return (
-      <div className="flex items-center text-[11.5px] text-neutral-500" style={{ height }}>
+      <div className="flex items-center text-[11.5px] text-ink-muted" style={{ height }}>
         no history this window
       </div>
     )

@@ -17,11 +17,11 @@ export function KpiRow({ sites, clusterCount }: { sites: SiteStatus[]; clusterCo
       {tiles.map((tile) => (
         <div
           key={tile.label}
-          className="flex h-[104px] min-w-[150px] flex-1 flex-col justify-center rounded-xl border border-neutral-800 bg-neutral-900 p-4 shadow-lg shadow-black/30"
+          className="flex h-[104px] min-w-[150px] flex-1 flex-col justify-center rounded-xl border border-line bg-panel p-4 panel-shadow"
         >
-          <div className="mb-2 text-[11.5px] font-semibold tracking-wide text-neutral-500 uppercase">{tile.label}</div>
+          <div className="mb-2 text-[11.5px] font-semibold tracking-wide text-ink-muted uppercase">{tile.label}</div>
           <div className={`font-mono text-[28px] font-semibold tracking-tight tabular-nums ${tile.tone}`}>{tile.value}</div>
-          {tile.sub && <div className="mt-1 text-xs text-neutral-500">{tile.sub}</div>}
+          {tile.sub && <div className="mt-1 text-xs text-ink-muted">{tile.sub}</div>}
         </div>
       ))}
     </>

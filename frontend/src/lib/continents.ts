@@ -59,7 +59,10 @@ export const CONTINENT_FILL: Record<string, string> = {
   africa: 'rgba(224, 122, 95, 0.14)',
   americas: 'rgba(129, 178, 154, 0.14)',
   oceania: 'rgba(179, 157, 219, 0.16)',
-  other: 'rgba(255, 255, 255, 0.035)',
+  // A neutral mid-tone rather than white-based — a white overlay barely
+  // shows on the dark theme's near-black canvas and vanishes entirely on
+  // the light theme's already-light canvas.
+  other: 'rgba(120, 130, 138, 0.12)',
 }
 
 export const CONTINENT_FILL_HOVER: Record<string, string> = {

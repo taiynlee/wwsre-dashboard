@@ -6,7 +6,7 @@
 
 ## 目前狀態
 
-功能已完整實作並可部署(見下方[部署](#部署docker-image)):Public API、Admin API、主看板前端、後台管理前端都做完,後端 43 個測試、前後台前端共 11 個元件測試全過。逐項可勾選的實作紀錄在 [plan.md](plan.md)。
+功能已完整實作並可部署(見下方[部署](#部署docker-image)):Public API、Admin API、主看板前端、後台管理前端都做完,後端 43 個測試、前後台前端共 14 個元件測試全過。逐項可勾選的實作紀錄在 [plan.md](plan.md)。
 
 ## 為什麼要做這個
 
@@ -69,7 +69,7 @@ flowchart LR
 | 路由 | TanStack Router(file-based) | 用檔案系統決定路由,型別安全的路由參數(如 `/sites/$code`) |
 | 資料抓取 | TanStack Query | `useQuery`/`useMutation`,自動輪詢(60 秒)+ 快取,兩個前端都用同一套 |
 | 世界地圖 | d3-geo + topojson-client | 真實世界地圖 topojson,動態投影與版面配置(見 `frontend/src/lib/siteProjection.ts`) |
-| 樣式 | Tailwind CSS | |
+| 樣式 | Tailwind CSS | 深/淺主題用 CSS 變數 token 做(`index.css` 的 `@theme` + `:root[data-theme="light"]` 覆寫),元件一律吃 `bg-canvas`/`text-ink` 這類語意 class,不直接寫死 `neutral-xxx`;`ThemeToggle`(主看板右上角)切換,選擇存 `localStorage`,預設深色 |
 | HTTP client | Axios | 前端統一透過一個 Axios instance(`lib/api.ts`)打自己的 backend,不直接打 Grafana |
 | 圖示 | lucide-react | |
 | 打包工具 | Vite | 前台、後台各自獨立的 Vite 專案(兩個 `package.json`) |
@@ -239,7 +239,7 @@ npm run dev            # 另一個 Vite port,如 http://localhost:5174
 
 ```bash
 cd backend && uv run pytest        # 43 個測試
-cd frontend && npm test            # Vitest,元件測試(7 個)
+cd frontend && npm test            # Vitest,元件測試(10 個)
 cd admin-frontend && npm test      # Vitest,元件測試(4 個)
 ```
 
@@ -262,7 +262,7 @@ cd admin-frontend && npm test      # Vitest,元件測試(4 個)
 2. **Backend 唯讀資料層**——`GrafanaClient`、TTL cache、整合登錄表與即時 SLO 的 `slo_service`
 3. **Public API**——`/api/public/sites`、`/sites/{code}/clusters`、`/categories`、`/trend`、`/clusters/{id}/live`
 4. **Admin API**——site 的 CRUD、per-site per-category SLO 設定讀寫,port 8001
-5. **主看板前端**——世界地圖(`d3-geo` + 真實 topojson,動態投影與版面配置,國家依五大洲上色,滑鼠移到國家或海洋上都會顯示中英文名稱)、KPI 列、Global SLO trend(登錄 site 的 current_pct 平均,忽略沒資料的 site)、site 卡片網格(右側固定張數 + 下方其餘,地圖與選點連線互動,連線起點精準對齊圖上的圓點,卡片下方即時顯示該 site 的概算當地時間——以經度概算 UTC 偏移,非真正的行政時區)、整頁等比例縮放(`ScaleToFit`,視窗變窄時文字與版面同步縮小,不跑版,垂直方向不裁切超出正常版面高度的內容如 hover tooltip)、site detail 頁面每張 cluster 卡片 hover 顯示該 cluster 自己 9 個分類的圓環分數
+5. **主看板前端**——世界地圖(`d3-geo` + 真實 topojson,動態投影與版面配置,國家依五大洲上色,滑鼠移到國家或海洋上都會顯示中英文名稱)、KPI 列、Global SLO trend(登錄 site 的 current_pct 平均,忽略沒資料的 site)、site 卡片網格(右側固定張數 + 下方其餘,地圖與選點連線互動,連線起點精準對齊圖上的圓點,卡片下方即時顯示該 site 的概算當地時間——以經度概算 UTC 偏移,非真正的行政時區)、整頁等比例縮放(`ScaleToFit`,視窗變窄時文字與版面同步縮小,不跑版,垂直方向不裁切超出正常版面高度的內容如 hover tooltip)、site detail 頁面每張 cluster 卡片 hover 顯示該 cluster 自己 9 個分類的圓環分數、深/淺主題切換(主頁右上角 `ThemeToggle`,全站共用同一個主題、選擇存 `localStorage`,預設深色;淺色不是直接反轉深色配色,是另外調過的淺灰色階跟狀態色對比度)
 6. **後台管理前端**——卡片式 CRUD、每個 site 可展開設定 9 個 category 各自的 target 與是否計入平均、無登入機制、獨立打包、Todo list(背景 checker 每 5 分鐘掃描全部 site,列出沒資料/未達標/category 缺失/cluster 缺 Grafana 連結,每筆附「修好後 site SLO 預估提升多少 %」,結果只存記憶體,不持久化)
 7. **打磨**——Grafana 連不上時的優雅降級(回傳最後一次快取資料並標記 `stale`)、響應式與無障礙檢查、測試、主看板與後台標題視覺統一(漸層主標題 + 強調色小標)
 8. **部署**——單一 Docker image(public `/` + admin `/admin` + 兩個 backend,見上方[部署](#部署docker-image))

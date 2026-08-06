@@ -8,6 +8,7 @@ import { WorldMap } from '../components/WorldMap'
 import { TrendChart } from '../components/TrendChart'
 import { SiteMiniCard } from '../components/SiteMiniCard'
 import { ConnectorLine } from '../components/ConnectorLine'
+import { ThemeToggle } from '../components/ThemeToggle'
 import { useSiteLayout } from '../lib/siteProjection'
 
 export const Route = createFileRoute('/')({
@@ -85,7 +86,7 @@ function Overview() {
   if (sitesQuery.isPending) {
     return (
       <AppShell>
-        <p className="font-mono text-sm text-neutral-500">Loading site status…</p>
+        <p className="font-mono text-sm text-ink-muted">Loading site status…</p>
       </AppShell>
     )
   }
@@ -102,7 +103,7 @@ function Overview() {
 
   return (
     <AppShell>
-      <header className="mb-3 flex flex-wrap items-end justify-between gap-5 border-b border-neutral-900 pb-3">
+      <header className="mb-3 flex flex-wrap items-end justify-between gap-5 border-b border-line-faint pb-3">
         <div className="flex items-center gap-2">
           {/* logo.* is gitignored (confidential) — drop the real file into frontend/public/, hidden if absent */}
           <img
@@ -115,22 +116,25 @@ function Overview() {
           />
           <h1 className="flex flex-col">
             <span className="text-[8px] leading-none font-bold tracking-[0.2em] text-accent-strong uppercase">World Wide SRE</span>
-            <span className="bg-gradient-to-r from-neutral-50 to-accent-strong bg-clip-text text-[19px] leading-none font-bold tracking-tight text-transparent text-balance">
+            <span className="bg-gradient-to-r from-ink to-accent-strong bg-clip-text text-[19px] leading-none font-bold tracking-tight text-transparent text-balance">
               K8s Service Level Dashboard
             </span>
           </h1>
         </div>
-        <div
-          className={`flex items-center gap-2 rounded-full border px-3 py-2 font-mono text-xs ${
-            stale ? 'border-warn/40 bg-warn/10 text-warn' : 'border-neutral-800 bg-neutral-900 text-neutral-400'
-          }`}
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full motion-safe:animate-pulse ${
-              stale ? 'bg-warn shadow-[0_0_0_3px_rgba(232,163,61,0.14)]' : 'bg-good shadow-[0_0_0_3px_rgba(63,191,127,0.14)]'
+        <div className="flex items-center gap-2.5">
+          <div
+            className={`flex items-center gap-2 rounded-full border px-3 py-2 font-mono text-xs ${
+              stale ? 'border-warn/40 bg-warn/10 text-warn' : 'border-line bg-panel text-ink-soft'
             }`}
-          />
-          {stale ? 'stale — Grafana unreachable' : sitesQuery.isFetching ? 'syncing…' : 'live'}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full motion-safe:animate-pulse ${
+                stale ? 'bg-warn shadow-[0_0_0_3px_rgba(232,163,61,0.14)]' : 'bg-good shadow-[0_0_0_3px_rgba(63,191,127,0.14)]'
+              }`}
+            />
+            {stale ? 'stale — Grafana unreachable' : sitesQuery.isFetching ? 'syncing…' : 'live'}
+          </div>
+          <ThemeToggle />
         </div>
       </header>
 
@@ -142,10 +146,10 @@ function Overview() {
             <div className="flex flex-wrap gap-3.5">
               <KpiRow sites={sites} clusterCount={clusterCountQuery.data} />
             </div>
-            <div className="h-[104px] overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900 shadow-lg shadow-black/30">
+            <div className="h-[104px] overflow-hidden rounded-xl border border-line bg-panel panel-shadow">
               <div className="flex items-center justify-between gap-2.5 px-[18px] pt-3 pb-1">
                 <h2 className="text-[13.5px] font-semibold whitespace-nowrap">Global SLO trend</h2>
-                <span className="font-mono text-[11px] whitespace-nowrap text-neutral-500">weekly avg, all sites</span>
+                <span className="font-mono text-[11px] whitespace-nowrap text-ink-muted">weekly avg, all sites</span>
               </div>
               {trendQuery.isPending && <LoadingRow />}
               {trendQuery.isError && <ErrorRow message="Couldn't load trend data." />}
@@ -165,7 +169,7 @@ function Overview() {
                 }}
               >
                 <div
-                  className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900 shadow-lg shadow-black/30"
+                  className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-line bg-panel panel-shadow"
                   style={{
                     gridColumn: rightSites.length > 0 ? `1 / span ${bottomSites.length - 1}` : '1 / -1',
                     gridRow: rightSites.length > 0 ? `1 / span ${rightSites.length}` : '1',
@@ -173,7 +177,7 @@ function Overview() {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2.5 px-[18px] pt-4 pb-1">
                     <h2 className="text-[13.5px] font-semibold">Site status — this week</h2>
-                    <div className="flex flex-wrap gap-3.5 text-[11.5px] text-neutral-400">
+                    <div className="flex flex-wrap gap-3.5 text-[11.5px] text-ink-soft">
                       <Legend color="bg-good" label="Normal" />
                       <Legend color="bg-warn" label="No impact" />
                       <Legend color="bg-crit" label="Impact" />
@@ -257,7 +261,7 @@ function Legend({ color, label }: { color: string; label: string }) {
 }
 
 function LoadingRow() {
-  return <p className="px-[18px] pb-4 font-mono text-xs text-neutral-500">Loading…</p>
+  return <p className="px-[18px] pb-4 font-mono text-xs text-ink-muted">Loading…</p>
 }
 
 function ErrorRow({ message }: { message: string }) {
@@ -266,8 +270,8 @@ function ErrorRow({ message }: { message: string }) {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-neutral-800 bg-neutral-900/50 p-8 text-center">
-      <p className="text-sm text-neutral-500">{message}</p>
+    <div className="rounded-xl border border-dashed border-line bg-panel/50 p-8 text-center">
+      <p className="text-sm text-ink-muted">{message}</p>
     </div>
   )
 }

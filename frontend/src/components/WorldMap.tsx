@@ -195,7 +195,7 @@ export function WorldMap({
                   d={path(f) ?? undefined}
                   className="transition-colors duration-100"
                   fill={isHovered ? CONTINENT_FILL_HOVER[continent] : CONTINENT_FILL[continent]}
-                  stroke="#4a5a66"
+                  stroke="var(--color-map-border)"
                   strokeWidth={0.6}
                   onMouseMove={(e) => setHoverFromEvent(f.properties.name, e)}
                   onMouseLeave={() => setHover(null)}
@@ -242,10 +242,14 @@ export function WorldMap({
                   ref={(el) => onDotRef?.(site.code, el)}
                   r={7}
                   fill={fill}
-                  stroke={isSelected ? 'var(--color-accent)' : '#0a0c0f'}
+                  stroke={isSelected ? 'var(--color-accent)' : 'var(--color-canvas)'}
                   strokeWidth={isSelected ? 2.8 : 1.8}
                   filter="url(#pin-glow)"
                 />
+                {/* Label pill deliberately stays dark-with-light-text in both
+                    themes — it needs to stay legible over whatever land/ocean
+                    color sits under it on the map, independent of the page's
+                    own light/dark theme. */}
                 <rect x={pillX} y={pillY} width={textW + 8} height={16} rx={4} fill="rgba(10,12,15,0.72)" />
                 <text x={dx} y={dy} textAnchor={anchor} className="font-mono text-[12px] font-semibold" fill={isSelected ? '#eaedf1' : '#c3ccce'}>
                   {site.code}
@@ -258,12 +262,12 @@ export function WorldMap({
 
       {hover && (
         <div
-          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+10px)] rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs font-medium whitespace-nowrap text-neutral-200 shadow-lg"
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+10px)] rounded-md border border-line-strong bg-panel px-2 py-1 text-xs font-medium whitespace-nowrap text-ink shadow-lg"
           style={{ left: hover.x, top: hover.y }}
         >
           {hover.name}
           {(COUNTRY_NAME_ZH[hover.name] ?? OCEAN_NAME_ZH[hover.name]) && (
-            <span className="text-neutral-400"> {COUNTRY_NAME_ZH[hover.name] ?? OCEAN_NAME_ZH[hover.name]}</span>
+            <span className="text-ink-soft"> {COUNTRY_NAME_ZH[hover.name] ?? OCEAN_NAME_ZH[hover.name]}</span>
           )}
         </div>
       )}

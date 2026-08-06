@@ -7,12 +7,79 @@
   --color-unknown: #5b6570;
   --color-accent: #4fd1c5;
   --color-accent-strong: #8ce6dc;
+
+  /* Surface/text hierarchy — dark is the default (matches the values every
+     component was hardcoded to before theming existed); light is a
+     runtime override below, not a naive invert (see the [data-theme=light]
+     block's comment). Components reference these instead of raw neutral-xxx
+     Tailwind shades so both themes stay in one place. */
+  --color-canvas: #0a0c0f;
+  --color-panel: #171717;
+  --color-line-faint: #171717;
+  --color-line: #262626;
+  --color-line-strong: #404040;
+  --color-ink: #eaedf1;
+  --color-ink-soft: #a3a3a3;
+  --color-ink-muted: #737373;
+  --color-ink-faint: #525252;
+  --color-grid: #1a1f26;
+  --color-map-border: #4a5a66;
+}
+
+/* Not a --color-* token (not meant to become a bg-/text- utility) — just a
+   plain custom property the .panel-shadow/.dropdown-shadow utilities below
+   read, so shadow tint can flip with the theme too. */
+:root {
+  --shadow-tint: rgb(0 0 0 / 0.3);
+}
+
+/* Light theme overrides, applied via a `data-theme="light"` attribute on
+   <html> (see lib/theme.ts). Kept as light *gray* layers rather than white
+   panels-on-white — canvas/panel/line step up in lightness together so
+   cards still read as distinct surfaces, matching the dark theme's own
+   canvas-darker-than-panel relationship instead of flattening it.
+   Status/accent hues are re-tuned (not just reused) — the dark palette's
+   saturated brights (e.g. accent #4fd1c5) don't have enough contrast against
+   a light background to stay legible as text/borders. */
+:root[data-theme="light"] {
+  --color-canvas: #e7ebee;
+  --color-panel: #f2f4f6;
+  --color-line-faint: #e3e7ea;
+  --color-line: #d6dbe0;
+  --color-line-strong: #b7bfc6;
+  --color-ink: #161b1f;
+  --color-ink-soft: #4b555b;
+  --color-ink-muted: #6c767c;
+  --color-ink-faint: #78828a;
+  --color-grid: #d8dde1;
+  --color-map-border: #aeb8bd;
+
+  --color-good: #1f8f5a;
+  --color-warn: #a3650a;
+  --color-crit: #c93f35;
+  --color-unknown: #5b6570;
+  --color-accent: #0f8f82;
+  --color-accent-strong: #0a6b62;
+
+  --shadow-tint: rgb(20 30 35 / 0.1);
 }
 
 body {
   margin: 0;
-  background: #0a0c0f;
-  color: #eaedf1;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+.panel-shadow {
+  box-shadow:
+    0 10px 15px -3px var(--shadow-tint),
+    0 4px 6px -4px var(--shadow-tint);
+}
+
+.dropdown-shadow {
+  box-shadow:
+    0 20px 25px -5px var(--shadow-tint),
+    0 8px 10px -6px var(--shadow-tint);
 }
 
 :focus-visible {

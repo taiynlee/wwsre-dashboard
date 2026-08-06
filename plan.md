@@ -42,6 +42,7 @@ Checklist form of the roadmap in [README.md](README.md). Check items off as they
 - [x] Swap placeholder hand-drawn continents for real topojson — used `d3-geo` + `topojson-client` + `world-atlas` directly instead of `react-simple-maps`, which doesn't declare React 19 support yet (peer range still 16–18 as of the latest beta); same underlying libraries, no wrapper, no version conflict
 - [x] `/sites/$code` detail route: cluster list, category breakdown (new `GET /api/public/sites/{code}/categories` endpoint added to support this), external Grafana link
 - [x] Axios + TanStack Query wiring (60s staleTime/refetchInterval against backend TTL cache)
+- [x] Dark/light theme toggle (top-right of the overview page) — CSS custom-property token system in `index.css`, `localStorage`-persisted, defaults to dark; light isn't a naive invert, colors re-tuned for contrast
 
 ## Phase 6 — Admin panel UI
 
